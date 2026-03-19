@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.8.6</title>
+    <title>避難所レイアウト v22.8.7</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -133,16 +133,17 @@ cvs.addEventListener('touchend', e => {
     if(!pinch && isClickReady && !hasMoved && (Date.now() - touchStartTime < 300)) {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
+            // ★配置優先：activeAsset が -1 でなければ、必ず配置。他の処理は else に飛ばす。
             if(activeAsset !== -1) {
                 map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
                 selIdx = map.length-1;
             } else {
-                let h = map.findIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
+                let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
                 if(h !== -1) { selIdx = h; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; }
                 else { selIdx = -1; }
             }
         } else if(mode === 'erase') {
-            let h = map.findIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
+            let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
             if(h !== -1) map.splice(h, 1);
         }
     }
@@ -160,19 +161,13 @@ function removeEdgeLine(gx, gy) {
     let x = Math.round(gx), y = Math.round(gy);
     edgeLines = edgeLines.filter(l => !((Math.abs(l.x1-x)<0.6 && Math.abs(l.y1-y)<0.6) || (Math.abs(l.x2-x)<0.6 && Math.abs(l.y2-y)<0.6)));
 }
-
-window.deselect = () => { 
-    activeAsset = -1; selIdx = -1; 
-    document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); 
-    render(); 
-};
-
+window.deselect = () => { activeAsset = -1; selIdx = -1; syncThumbs(); render(); };
 function setMode(m) {
     mode = m; selIdx = -1; if(m !== 'move') activeAsset = -1;
     document.getElementById('m-move').className = m === 'move' ? 'active' : '';
     document.getElementById('m-pen').className = m === 'pen' ? 'active' : '';
     document.getElementById('m-erase').className = m === 'erase' ? 'active' : '';
-    render();
+    syncThumbs(); render();
 }
 document.getElementById('m-move').onclick = () => setMode('move');
 document.getElementById('m-pen').onclick = () => setMode('pen');
@@ -186,10 +181,8 @@ document.getElementById('img-in').onchange = (e) => {
                 const src = crop(i); const i2 = new Image();
                 i2.onload = () => { 
                     assets.push({img: i2, src: src, off: 0}); 
-                    addThumb(assets.length - 1); 
-                    save(); 
-                };
-                i2.src = src;
+                    refreshThumbList(); save(); 
+                }; i2.src = src;
             }; i.src = ev.target.result;
         }; r.readAsDataURL(f);
     }
@@ -205,28 +198,39 @@ function crop(img) {
     c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL();
 }
 
-function addThumb(idx) {
-    const d = document.createElement('div'); 
-    d.className = 'thumb'; 
-    d.style.backgroundImage = `url(${assets[idx].src})`;
-    // ★重要: インデックスを固定して渡す
-    d.onclick = () => { 
-        setMode('move'); 
-        document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected')); 
-        d.classList.add('selected'); 
-        activeAsset = idx; // ここで正しいインデックスを確実に保持
-        selIdx = -1; 
-        offS.value = assets[idx].off || 0;
-        render(); 
-    };
-    document.getElementById('item-list').appendChild(d);
+function refreshThumbList() {
+    const list = document.getElementById('item-list');
+    const uLabel = document.getElementById('upload-label');
+    const dBtn = list.querySelector('.deselect-btn');
+    list.innerHTML = ""; list.appendChild(dBtn); list.appendChild(uLabel);
+    assets.forEach((a, i) => {
+        const d = document.createElement('div');
+        d.className = 'thumb' + (activeAsset === i ? ' selected' : '');
+        d.style.backgroundImage = `url(${a.src})`;
+        d.onclick = () => { activeAsset = i; setMode('move'); };
+        list.insertBefore(d, uLabel);
+    });
+}
+function syncThumbs() {
+    document.querySelectorAll('.thumb').forEach((t, i) => {
+        if(activeAsset === i) t.classList.add('selected');
+        else t.classList.remove('selected');
+    });
 }
 
 function save() { localStorage.setItem('map_v28', JSON.stringify({m: map, el: edgeLines, a: assets.map(a=>({src:a.src, off:a.off}))})); }
 function load() {
     const s = localStorage.getItem('map_v28'); if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
-    d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets[i]={img, src:ad.src, off:ad.off}; addThumb(i); render(); }; img.src = ad.src; });
+    let loaded = 0;
+    d.a.forEach((ad, i) => { 
+        const img = new Image(); 
+        img.onload = () => { 
+            assets[i]={img, src:ad.src, off:ad.off}; 
+            loaded++; if(loaded === d.a.length) refreshThumbList(); render(); 
+        }; 
+        img.src = ad.src; 
+    });
 }
 window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; render(); save(); } };
 window.adjS = (v) => { if(selIdx!==-1){ let n = parseFloat(sizeS.value)+v; n=Math.max(0.1,Math.min(5,n)); sizeS.value=n; map[selIdx].s=n; render(); save(); } };
