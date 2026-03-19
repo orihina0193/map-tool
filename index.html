@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.8</title>
+    <title>避難所レイアウト v22.8.1</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -61,7 +61,6 @@ let touchStartTime = 0, hasMoved = false;
 
 function init() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; load(); setMode('move'); render(); }
 
-// 座標変換: (gx, gy) は北端。 (gx+1, gy+1) がそのマスの南端。
 const toS = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
 const toG = (sx, sy) => {
     let x = (sx - cam.x)/cam.z, y = (sy - cam.y)/cam.z;
@@ -79,53 +78,31 @@ function render() {
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
     
-    // オブジェクト描画 (奥から順にソート)
+    // オブジェクト描画 (奥優先ソート)
     const sortedMap = [...map].sort((a, b) => (a.x + a.y) - (b.x + b.y));
-
     sortedMap.forEach((d) => {
         const a = assets[d.aIdx]; if(!a) return;
-        const w = T_W * d.s;
-        const h = (a.img.height/a.img.width) * w;
-
-        // 【新・南側固定ロジック】
-        // 基準座標(d.x, d.y)は「配置した瞬間のマウス位置」をマスの北端としたもの。
-        // サイズd.sに関わらず、常に「同じ地点」を南端として固定するために、
-        // 配置時の仮想的な南端 anchor = toS(d.x + 1, d.y + 1) を不動の支点にする
-        const anchor = toS(d.x + 1, d.y + 1);
-        
-        // 画像の描画：下端中央を anchor に固定
+        const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
+        const anchor = toS(d.x + 1, d.y + 1); // 南端固定
         ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + (a.off || 0), w, h);
 
-        // 選択枠：これも南端(anchor)を基準に「奥」へ広がるように描く
         const originalIdx = map.indexOf(d);
         if(selIdx === originalIdx) {
             ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
-            // anchor(南)から逆算して、今のサイズd.s分の枠を描画
-            let pSouth = anchor;
-            let pWest = { x: anchor.x - (T_W/2)*d.s, y: anchor.y - (T_H/2)*d.s };
-            let pEast = { x: anchor.x + (T_W/2)*d.s, y: anchor.y - (T_H/2)*d.s };
-            let pNorth = { x: anchor.x, y: anchor.y - T_H*d.s };
-            
-            ctx.beginPath();
-            ctx.moveTo(pSouth.x, pSouth.y);
-            ctx.lineTo(pWest.x, pWest.y);
-            ctx.lineTo(pNorth.x, pNorth.y);
-            ctx.lineTo(pEast.x, pEast.y);
-            ctx.closePath();
-            ctx.stroke();
+            let pS = anchor, pW = {x:anchor.x-(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pE = {x:anchor.x+(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pN = {x:anchor.x, y:anchor.y-T_H*d.s};
+            ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke();
         }
     });
 
-    // 赤い線
+    // 赤い線 (ペンツール)
     ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
     edgeLines.forEach(l => {
         let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
     });
-
     ctx.restore();
 }
 
-// 以下、操作系
+// タッチ操作系
 cvs.addEventListener('touchstart', e => {
     touchStartTime = Date.now(); hasMoved = false;
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
@@ -136,6 +113,7 @@ cvs.addEventListener('touchstart', e => {
     }
     drag = true;
 });
+
 cvs.addEventListener('touchmove', e => {
     e.preventDefault(); const t = e.touches[0];
     if(Math.hypot(t.clientX - lastT.x, t.clientY - lastT.y) > 5) hasMoved = true;
@@ -146,22 +124,26 @@ cvs.addEventListener('touchmove', e => {
         cam.z *= f; lastDist = d; lastMid = m; document.getElementById('zoom-tag').innerText = "Zoom: "+Math.round(cam.z*100)+"%";
     } else if(drag) {
         const g = toG(t.clientX, t.clientY);
-        if(mode === 'move' && selIdx === -1 && activeAsset === -1) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
+        const prevG = toG(lastT.x, lastT.y);
+        if(mode === 'pen') {
+            // ペンの判定座標をグリッドに丸める（微調整対応）
+            let curX = Math.round(g.x), curY = Math.round(g.y);
+            let oldX = Math.round(prevG.x), oldY = Math.round(prevG.y);
+            if(curX !== oldX || curY !== oldY) { addEdgeLine(oldX, oldY, curX, curY); }
+        } else if(mode === 'erase') { 
+            removeEdgeLine(g.x, g.y); 
+        } else if(mode === 'move' && selIdx === -1 && activeAsset === -1) {
+            cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y);
+        }
     }
     lastT = {x: t.clientX, y: t.clientY}; render();
 });
+
 cvs.addEventListener('touchend', e => {
     if(!pinch && drag && !hasMoved && (Date.now() - touchStartTime < 250)) {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
-            // 判定も南端基準に修正
-            let h = map.findIndex(d => {
-                const anchor = {x: d.x + 1, y: d.y + 1};
-                return g.x > anchor.x - d.s && g.x < anchor.x && g.y > anchor.y - d.s && g.y < anchor.y;
-            });
-            // 簡易判定：クリックしたマスの近くのオブジェクトを探す
-            h = map.findIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
-
+            let h = map.findIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
             if(h !== -1) { selIdx = h; activeAsset = -1; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; }
             else if(activeAsset !== -1) { map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)}); selIdx = map.length-1; }
             else { selIdx = -1; }
@@ -173,6 +155,20 @@ cvs.addEventListener('touchend', e => {
     drag = pinch = false; save(); render();
 });
 
+function addEdgeLine(gx1, gy1, gx2, gy2) {
+    // 同じ場所への重複描画を防止
+    if(gx1 === gx2 && gy1 === gy2) return;
+    const key = [gx1, gy1, gx2, gy2].sort((a,b)=>a-b).join(',');
+    if(!edgeLines.some(l => [l.x1, l.y1, l.x2, l.y2].sort((a,b)=>a-b).join(',') === key)) {
+        edgeLines.push({x1:gx1, y1:gy1, x2:gx2, y2:gy2});
+    }
+}
+function removeEdgeLine(gx, gy) {
+    let x = Math.round(gx), y = Math.round(gy);
+    edgeLines = edgeLines.filter(l => !((Math.abs(l.x1-x)<0.5 && Math.abs(l.y1-y)<0.5) || (Math.abs(l.x2-x)<0.5 && Math.abs(l.y2-y)<0.5)));
+}
+
+// UI操作系 (中略: 保存・読込等は変更なし)
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
 function setMode(m) {
     mode = m; selIdx = -1; if(m !== 'move') activeAsset = -1;
@@ -213,7 +209,7 @@ function addThumb(idx) {
 }
 function save() { localStorage.setItem('map_v28', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
 function load() {
-    const s = localStorage.getItem('map_v28') || localStorage.getItem('map_v22'); if(!s) return;
+    const s = localStorage.getItem('map_v28'); if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
     d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets[i]={img, src:ad.src, off:ad.off}; addThumb(i); render(); }; img.src = ad.src; });
 }
