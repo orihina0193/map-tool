@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v23.7</title>
+    <title>避難所レイアウト v23.8</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -79,7 +79,6 @@ function render() {
         let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2);
         ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
     });
-    // v22形式の単純描画
     map.forEach((d, i) => {
         const a = assets[d.aIdx]; if(!a) return;
         let p = toS(d.x, d.y), w = T_W * d.s, h = (a.img.height/a.img.width)*w;
@@ -128,10 +127,23 @@ cvs.addEventListener('touchend', e => {
     if(!pinch && drag && !hasMoved && (Date.now() - touchStartTime < 250)) {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
+            // v22と全く同じ判定順序に戻す
             let h = map.findIndex(d => g.x >= d.x && g.x < d.x+d.s && g.y >= d.y && g.y < d.y+d.s);
-            if(h !== -1) { selIdx = h; activeAsset = -1; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); }
-            else if(activeAsset !== -1) { map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)}); selIdx = map.length-1; }
-            else { selIdx = -1; }
+            if(h !== -1) {
+                // 既存の建物があるなら選択（アクティブな画像は解除）
+                selIdx = h;
+                activeAsset = -1;
+                sizeS.value = map[h].s;
+                offS.value = assets[map[h].aIdx].off || 0;
+                document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected'));
+            } else if(activeAsset !== -1) {
+                // 何もない場所かつ画像が選ばれていれば「設置」
+                map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
+                selIdx = map.length-1;
+                // ※ ここで activeAsset を消さないので、連続設置が可能！
+            } else {
+                selIdx = -1;
+            }
         } else if(mode === 'erase') {
             let h = map.findIndex(d => g.x >= d.x && g.x < d.x+d.s && g.y >= d.y && g.y < d.y+d.s);
             if(h !== -1) map.splice(h, 1);
@@ -186,10 +198,9 @@ function addThumb(idx) {
     d.onclick = () => { setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); activeAsset = idx; selIdx = -1; offS.value = assets[idx].off || 0; render(); };
     document.getElementById('item-list').appendChild(d);
 }
-function save() { localStorage.setItem('map_v23_7', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
+function save() { localStorage.setItem('map_v23_8', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
 function load() {
-    // 過去のどのバージョンからでも読み込めるように
-    const s = localStorage.getItem('map_v23_7') || localStorage.getItem('map_v23_6') || localStorage.getItem('map_v23_5') || localStorage.getItem('map_v23_4') || localStorage.getItem('map_v22') || localStorage.getItem('map_v21');
+    const s = localStorage.getItem('map_v23_8') || localStorage.getItem('map_v23_7') || localStorage.getItem('map_v22') || localStorage.getItem('map_v21');
     if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
     d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets[i]={img, src:ad.src, off:ad.off}; addThumb(i); render(); }; img.src = ad.src; });
