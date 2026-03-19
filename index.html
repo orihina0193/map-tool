@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.8.3</title>
+    <title>避難所レイアウト v22.8.4</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -69,18 +69,15 @@ const toG = (sx, sy) => {
 function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
-    
     ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
     for(let i=-20; i<=40; i++){
         let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
-    
     let drawList = [];
     map.forEach((d, i) => drawList.push({ type: 'img', data: d, sort: d.x + d.s + d.y + d.s, originalIdx: i }));
     edgeLines.forEach((l, i) => drawList.push({ type: 'line', data: l, sort: Math.max(l.x1, l.x2) + Math.max(l.y1, l.y2), originalIdx: i }));
     drawList.sort((a, b) => a.sort - b.sort);
-
     drawList.forEach(obj => {
         if(obj.type === 'img') {
             const d = obj.data; const a = assets[d.aIdx]; if(!a) return;
@@ -93,10 +90,8 @@ function render() {
                 ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke();
             }
         } else {
-            const l = obj.data;
-            ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
-            let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2);
-            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+            const l = obj.data; ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
+            let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
         }
     });
     ctx.restore();
@@ -116,7 +111,7 @@ cvs.addEventListener('touchstart', e => {
 cvs.addEventListener('touchmove', e => {
     e.preventDefault(); const t = e.touches[0];
     const moveDist = Math.hypot(t.clientX - lastT.x, t.clientY - lastT.y);
-    if(moveDist > 5) { hasMoved = true; isClickReady = false; }
+    if(moveDist > 7) { hasMoved = true; isClickReady = false; }
     if(pinch && e.touches.length >= 2) {
         let d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
         let m = {x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
@@ -129,7 +124,7 @@ cvs.addEventListener('touchmove', e => {
             let oldX = Math.round(prevG.x), oldY = Math.round(prevG.y);
             if(curX !== oldX || curY !== oldY) { addEdgeLine(oldX, oldY, curX, curY); }
         } else if(mode === 'erase') { removeEdgeLine(g.x, g.y); }
-        else if(mode === 'move' && selIdx === -1 && activeAsset === -1) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
+        else if(mode === 'move' && activeAsset === -1) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
     }
     lastT = {x: t.clientX, y: t.clientY}; render();
 }, {passive: false});
@@ -138,10 +133,12 @@ cvs.addEventListener('touchend', e => {
     if(!pinch && isClickReady && !hasMoved && (Date.now() - touchStartTime < 300)) {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
+            // ★配置モード優先：画像を持っていたら絶対に置く（他の判定に邪魔させない）
             if(activeAsset !== -1) {
                 map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
                 selIdx = map.length-1;
             } else {
+                // 画像を持っていない時だけ、既存の建物を選択する
                 let h = map.findIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
                 if(h !== -1) { selIdx = h; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; }
                 else { selIdx = -1; }
@@ -210,11 +207,7 @@ function addThumb(idx) {
     };
     document.getElementById('item-list').appendChild(d);
 }
-function save() { 
-    localStorage.setItem('map_v28', JSON.stringify({
-        m: map, el: edgeLines, a: assets.map(a=>({src:a.src, off:a.off}))
-    })); 
-}
+function save() { localStorage.setItem('map_v28', JSON.stringify({m: map, el: edgeLines, a: assets.map(a=>({src:a.src, off:a.off}))})); }
 function load() {
     const s = localStorage.getItem('map_v28'); if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
@@ -225,12 +218,7 @@ window.adjS = (v) => { if(selIdx!==-1){ let n = parseFloat(sizeS.value)+v; n=Mat
 window.adjO = (v) => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ let n=parseInt(offS.value)+v; offS.value=n; assets[idx].off=n; render(); save(); } };
 sizeS.oninput = () => { if(selIdx!==-1){ map[selIdx].s=parseFloat(sizeS.value); render(); } };
 offS.oninput = () => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ assets[idx].off=parseInt(offS.value); render(); } };
-
-window.clearAll = () => { 
-    if(confirm("【警告】すべての配置データと画像を完全にリセットしますか？")){ 
-        localStorage.clear(); location.reload(); 
-    } 
-};
+window.clearAll = () => { if(confirm("【警告】リセットしますか？")){ localStorage.clear(); location.reload(); } };
 init();
 </script>
 </body>
