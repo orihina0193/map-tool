@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ポコポコ・マップエディタ</title>
+    <style>
+        :root { --panel-h: 160px; }
+        body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; }
+        canvas { display: block; touch-action: none; }
+        
+        /* 下部操作パネル */
+        #ui-panel {
+            position: absolute; bottom: 0; width: 100%; height: var(--panel-h);
+            background: rgba(255,255,255,0.9); backdrop-filter: blur(5px);
+            border-top: 1px solid #ccc; display: flex; flex-direction: column;
+        }
+        #item-list {
+            display: flex; overflow-x: auto; padding: 10px; gap: 10px; flex: 1;
+        }
+        .thumb {
+            width: 70px; height: 70px; border-radius: 8px; border: 2px solid transparent;
+            background-size: contain; background-repeat: no-repeat; background-position: center;
+            background-color: #fff; flex-shrink: 0;
+        }
+        .thumb.selected { border-color: #007aff; box-shadow: 0 0 10px rgba(0,122,255,0.5); }
+        
+        #edit-tools {
+            height: 50px; display: flex; align-items: center; padding: 0 15px;
+            gap: 15px; border-top: 1px solid #eee; font-size: 14px;
+        }
+        input[type="range"] { flex: 1; }
+        
+        #upload-btn {
+            width: 70px; height: 70px; border: 2px dashed #bbb; border-radius: 8px;
+            display: flex; justify-content: center; align-items: center; font-size: 30px; color: #999;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="cvs"></canvas>
+
+<div id="ui-panel">
+    <div id="item-list">
+        <label id="upload-btn">＋<input type="file" id="img-in" hidden accept="image/*" multiple></label>
+        </div>
+    <div id="edit-tools">
+        <span>サイズ:</span>
+        <input type="range" id="size-slider" min="1" max="10" value="1" disabled>
+        <button id="del-btn" disabled>削除</button>
+        <button id="clear-btn">全消去</button>
+    </div>
+</div>
+
+<script>
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+const imgIn = document.getElementById('img-in');
+const itemList = document.getElementById('item-list');
+const sizeSlider = document.getElementById('size-slider');
+const delBtn = document.getElementById('del-btn');
+
+// 設定
+const T_W = 64, T_H = 32; // タイルサイズ
+let camera = { x: 0, y: 0, zoom: 1 };
+let assets = []; // {id, img, src}
+let mapData = []; // {x, y, assetIdx, size}
+let selectedMapIdx = -1; // 配置済みアイテムの選択
+let activeAssetIdx = -1; // 新規配置用の選択
+
+// --- 初期化 ---
+function init() {
+    cvs.width = window.innerWidth;
+    cvs.height = window.innerHeight - 160;
+    camera.x = cvs.width / 2;
+    camera.y = cvs.height / 4;
+    loadData();
+    render();
+}
+
+// --- 座標変換 ---
+const toScreen = (gx, gy) => ({
+    x: (gx - gy) * (T_W / 2),
+    y: (gx + gy) * (T_H / 2)
+});
+const toGrid = (sx, sy) => {
+    let x = (sx - camera.x) / camera.zoom;
+    let y = (sy - camera.y) / camera.zoom;
+    let gy = (y / (T_H / 2) - x / (T_W / 2)) / 2;
+    let gx = (x / (T_W / 2) + gy);
+    return { x: Math.floor(gx), y: Math.floor(gy) };
+};
+
+// --- 描画 ---
+function render() {
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.save();
+    ctx.translate(camera.x, camera.y);
+    ctx.scale(camera.zoom, camera.zoom);
+
+    // グリッド
+    ctx.strokeStyle = "rgba(0,0,0,0.1)";
+    for(let i=-10; i<=20; i++) {
+        let s = toScreen(i, -10), e = toScreen(i, 20);
+        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+        s = toScreen(-10, i); e = toScreen(20, i);
+        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+    }
+
+    // アイテム描画
+    mapData.forEach((d, idx) => {
+        const asset = assets[d.assetIdx];
+        if(!asset) return;
+        let pos = toScreen(d.x, d.y);
+        let w = T_W * d.size;
+        let h = (asset.img.height / asset.img.width) * w;
+        
+        // アイソメトリックな位置調整
+        ctx.drawImage(asset.img, pos.x - w/2, pos.y - h + (T_H/2)*d.size, w, h);
+
+        // 選択中の枠線
+        if(selectedMapIdx === idx) {
+            ctx.strokeStyle = "#007aff"; ctx.lineWidth = 3;
+            drawIsoRect(d.x, d.y, d.size);
+        }
+    });
+    ctx.restore();
+}
+
+function drawIsoRect(gx, gy, size) {
+    let p1 = toScreen(gx, gy), p2 = toScreen(gx+size, gy);
+    let p3 = toScreen(gx+size, gy+size), p4 = toScreen(gx, gy+size);
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
+    ctx.closePath(); ctx.stroke();
+}
+
+// --- イベント ---
+cvs.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    const g = toGrid(t.clientX, t.clientY);
+    
+    // 配置済みをクリックしたか判定
+    let hit = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
+    
+    if(hit !== -1) {
+        selectedMapIdx = hit;
+        sizeSlider.disabled = false;
+        sizeSlider.value = mapData[hit].size;
+        delBtn.disabled = false;
+    } else if(activeAssetIdx !== -1) {
+        mapData.push({x: g.x, y: g.y, assetIdx: activeAssetIdx, size: 1});
+        selectedMapIdx = mapData.length - 1;
+        saveData();
+    } else {
+        selectedMapIdx = -1;
+        sizeSlider.disabled = true;
+        delBtn.disabled = true;
+    }
+    render();
+});
+
+// リサイズ・削除
+sizeSlider.oninput = () => {
+    if(selectedMapIdx !== -1) {
+        mapData[selectedMapIdx].size = parseInt(sizeSlider.value);
+        render(); saveData();
+    }
+};
+delBtn.onclick = () => {
+    if(selectedMapIdx !== -1) {
+        mapData.splice(selectedMapIdx, 1);
+        selectedMapIdx = -1; render(); saveData();
+    }
+};
+
+// 画像アップロード
+imgIn.onchange = async (e) => {
+    for(let file of e.target.files) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const img = new Image();
+            img.src = ev.target.result;
+            img.onload = () => {
+                assets.push({img, src: img.src});
+                createThumb(assets.length - 1);
+                saveData();
+            };
+        };
+        reader.readAsDataURL(file);
+    }
+};
+
+function createThumb(idx) {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.style.backgroundImage = `url(${assets[idx].src})`;
+    div.onclick = () => {
+        document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected'));
+        div.classList.add('selected');
+        activeAssetIdx = idx;
+    };
+    itemList.appendChild(div);
+}
+
+// --- 保存関連 ---
+function saveData() {
+    const data = {
+        map: mapData,
+        images: assets.map(a => a.src) // 画像もBase64で保存（容量注意）
+    };
+    localStorage.setItem('iso_map_save', JSON.stringify(data));
+}
+
+function loadData() {
+    const saved = localStorage.getItem('iso_map_save');
+    if(!saved) return;
+    const data = JSON.parse(saved);
+    mapData = data.map;
+    data.images.forEach((src, i) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => {
+            assets[i] = {img, src};
+            createThumb(i);
+            render();
+        };
+    });
+}
+
+document.getElementById('clear-btn').onclick = () => {
+    if(confirm("全消去しますか？")) {
+        mapData = []; localStorage.removeItem('iso_map_save'); render();
+    }
+};
+
+init();
+</script>
+</body>
+</html>
