@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.8.4</title>
+    <title>避難所レイアウト v22.8.5</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -133,12 +133,10 @@ cvs.addEventListener('touchend', e => {
     if(!pinch && isClickReady && !hasMoved && (Date.now() - touchStartTime < 300)) {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
-            // ★配置モード優先：画像を持っていたら絶対に置く（他の判定に邪魔させない）
             if(activeAsset !== -1) {
                 map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
                 selIdx = map.length-1;
             } else {
-                // 画像を持っていない時だけ、既存の建物を選択する
                 let h = map.findIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
                 if(h !== -1) { selIdx = h; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; }
                 else { selIdx = -1; }
@@ -175,17 +173,42 @@ document.getElementById('m-pen').onclick = () => setMode('pen');
 document.getElementById('m-erase').onclick = () => setMode('erase');
 
 document.getElementById('img-in').onchange = (e) => {
+    // 複数アップロード時に「今選択中の画像」がリセットされないように、
+    // 既存の選択状態（青枠）と activeAsset を退避させておき、追加後に復元します
+    const currentActive = activeAsset; 
+    
     for(let f of e.target.files) {
         const r = new FileReader();
         r.onload = (ev) => {
             const i = new Image(); i.onload = () => {
                 const src = crop(i); const i2 = new Image();
-                i2.onload = () => { assets.push({img: i2, src: src, off: 0}); addThumb(assets.length-1); save(); };
+                i2.onload = () => { 
+                    assets.push({img: i2, src: src, off: 0}); 
+                    const newIdx = assets.length - 1;
+                    addThumb(newIdx); 
+                    // もし何も選んでいなかった時だけ、新しく追加したものを選択
+                    if(currentActive === -1 && activeAsset === -1) {
+                         selectAsset(newIdx);
+                    }
+                    save(); 
+                };
                 i2.src = src;
             }; i.src = ev.target.result;
         }; r.readAsDataURL(f);
     }
 };
+
+function selectAsset(idx) {
+    activeAsset = idx; 
+    selIdx = -1;
+    document.querySelectorAll('.thumb').forEach((t, i) => {
+        // 解除ボタン(0番目)を除いたインデックスで判定
+        if(i-1 === idx) t.classList.add('selected');
+        else t.classList.remove('selected');
+    });
+    render();
+}
+
 function crop(img) {
     const c = document.createElement('canvas'); const t = c.getContext('2d');
     c.width = img.width; c.height = img.height; t.drawImage(img,0,0);
