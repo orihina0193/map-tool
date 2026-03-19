@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v18</title>
+    <title>避難所レイアウト v19</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -25,7 +25,9 @@
         .mode-box { flex: 1; display: flex; flex-direction: column; gap: 8px; }
         .mode-row { display: flex; gap: 4px; }
         .mode-row button { flex: 1; height: 40px; font-size: 11px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
-        .mode-row button.active { background: #007aff; color: #fff; border-color: #004da3; }
+        .mode-row button.active { background: #ff3b30; color: #fff; border-color: #c41e16; }
+        #m-move.active { background: #007aff; border-color: #004da3; }
+        #m-erase.active { background: #8e8e93; border-color: #636366; }
         .clear-btn { height: 32px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #666; }
         #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; z-index: 50; }
     </style>
@@ -52,7 +54,7 @@ const cvs = document.getElementById('cvs'); const ctx = cvs.getContext('2d');
 const sizeS = document.getElementById('size-s'); const offS = document.getElementById('off-s');
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
-let assets = [], map = [], selIdx = -1, activeAsset = -1, mode = 'move';
+let assets = [], map = [], lines = [], selIdx = -1, activeAsset = -1, mode = 'move';
 let drag = false, pinch = false, lastDist = 0, lastMid = {x:0, y:0}, lastT = {x:0, y:0};
 
 function init() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; load(); setMode('move'); render(); }
@@ -65,11 +67,22 @@ const toG = (sx, sy) => {
 function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
-    ctx.strokeStyle = "rgba(0,0,0,0.1)"; // グリッドを少し見やすく
+    
+    // グリッド描画
+    ctx.strokeStyle = "rgba(0,0,0,0.08)";
     for(let i=-20; i<=40; i++){
         let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
+
+    // 赤いペン描画 (lines)
+    ctx.fillStyle = "rgba(255, 59, 48, 0.6)";
+    lines.forEach(l => {
+        let p1 = toS(l.x, l.y), p2 = toS(l.x+1, l.y), p3 = toS(l.x+1, l.y+1), p4 = toS(l.x, l.y+1);
+        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y); ctx.closePath(); ctx.fill();
+    });
+
+    // 建物描画 (map)
     map.forEach((d, i) => {
         const a = assets[d.aIdx]; if(!a) return;
         let p = toS(d.x, d.y), w = T_W * d.s, h = (a.img.height/a.img.width)*w;
@@ -111,10 +124,9 @@ function crop(img) {
 function addThumb(idx) {
     const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`;
     d.onclick = () => {
-        const isAlreadySelected = d.classList.contains('selected');
+        setMode('move'); // 画像を選んだら自動で移動モードに
         document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected'));
-        if(isAlreadySelected) { activeAsset = -1; } 
-        else { d.classList.add('selected'); activeAsset = idx; selIdx = -1; offS.value = assets[idx].off || 0; }
+        d.classList.add('selected'); activeAsset = idx; selIdx = -1; offS.value = assets[idx].off || 0;
         render();
     };
     document.getElementById('item-list').appendChild(d);
@@ -136,13 +148,14 @@ cvs.addEventListener('touchstart', e => {
         if(h !== -1) { selIdx = h; activeAsset = -1; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); }
         else if(activeAsset !== -1) { map.push({x:gx, y:gy, aIdx:activeAsset, s:parseFloat(sizeS.value)}); selIdx = map.length-1; }
         else { selIdx = -1; }
-    } else if(mode === 'pen' && activeAsset !== -1) {
-        if(!map.some(d => d.x === gx && d.y === gy && d.aIdx === activeAsset)) {
-            map.push({x:gx, y:gy, aIdx:activeAsset, s:parseFloat(sizeS.value)});
-        }
+    } else if(mode === 'pen') {
+        if(!lines.some(l => l.x === gx && l.y === gy)) lines.push({x:gx, y:gy});
     } else if(mode === 'erase') {
+        // 建物消去
         let h = map.findIndex(d => g.x >= d.x && g.x < d.x+d.s && g.y >= d.y && g.y < d.y+d.s);
         if(h !== -1) map.splice(h, 1);
+        // 赤い線消去
+        lines = lines.filter(l => l.x !== gx || l.y !== gy);
     }
     render();
 });
@@ -158,15 +171,13 @@ cvs.addEventListener('touchmove', e => {
         const g = toG(t.clientX, t.clientY);
         const gx = Math.floor(g.x), gy = Math.floor(g.y);
         
-        if(mode === 'pen' && activeAsset !== -1) {
-            // グリッドにピタッと吸着して、まだ建物がない時だけ置く
-            if(!map.some(d => d.x === gx && d.y === gy && d.aIdx === activeAsset)) {
-                map.push({x:gx, y:gy, aIdx:activeAsset, s:parseFloat(sizeS.value)});
-                render();
-            }
+        if(mode === 'pen') {
+            if(!lines.some(l => l.x === gx && l.y === gy)) { lines.push({x:gx, y:gy}); render(); }
         } else if(mode === 'erase') {
             let h = map.findIndex(d => g.x >= d.x && g.x < d.x+d.s && g.y >= d.y && g.y < d.y+d.s);
-            if(h !== -1) { map.splice(h, 1); render(); }
+            if(h !== -1) map.splice(h, 1);
+            lines = lines.filter(l => l.x !== gx || l.y !== gy);
+            render();
         } else if(mode === 'move' && selIdx === -1 && activeAsset === -1) {
             cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y);
             render();
@@ -183,21 +194,21 @@ sizeS.oninput = () => { if(selIdx!==-1){ map[selIdx].s=parseFloat(sizeS.value); 
 offS.oninput = () => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ assets[idx].off=parseInt(offS.value); render(); } };
 
 function setMode(m) {
-    mode = m; selIdx = -1; activeAsset = -1;
-    document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected'));
-    document.getElementById('m-move').classList.toggle('active', m === 'move');
-    document.getElementById('m-pen').classList.toggle('active', m === 'pen');
-    document.getElementById('m-erase').classList.toggle('active', m === 'erase');
+    mode = m; selIdx = -1; 
+    if(m === 'pen' || m === 'erase') { activeAsset = -1; document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected')); }
+    document.getElementById('m-move').className = m === 'move' ? 'active' : '';
+    document.getElementById('m-pen').className = m === 'pen' ? 'active' : '';
+    document.getElementById('m-erase').className = m === 'erase' ? 'active' : '';
     render();
 }
 document.getElementById('m-move').onclick = () => setMode('move');
 document.getElementById('m-pen').onclick = () => setMode('pen');
 document.getElementById('m-erase').onclick = () => setMode('erase');
 
-function save() { localStorage.setItem('map_v18', JSON.stringify({m:map, a:assets.map(a=>({src:a.src, off:a.off}))})); }
+function save() { localStorage.setItem('map_v19', JSON.stringify({m:map, l:lines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
 function load() {
-    const s = localStorage.getItem('map_v18') || localStorage.getItem('map_v17'); 
-    if(!s) return; const d = JSON.parse(s); map = d.m || [];
+    const s = localStorage.getItem('map_v18') || localStorage.getItem('map_v19'); 
+    if(!s) return; const d = JSON.parse(s); map = d.m || []; lines = d.l || [];
     d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets[i]={img, src:ad.src, off:ad.off}; addThumb(i); render(); }; img.src = ad.src; });
 }
 window.clearAll = () => { if(confirm("消去？")){ localStorage.clear(); location.reload(); } };
