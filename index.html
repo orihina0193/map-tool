@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.3</title>
+    <title>避難所レイアウト v22.4</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -82,14 +82,14 @@ function render() {
         const a = assets[d.aIdx]; if(!a) return;
         let w = T_W * d.s;
         let h = (a.img.height/a.img.width) * w;
-        
-        // ★最重要修正：
-        // 手前の角（南側）は座標で言うと toS(d.x + d.s, d.y + d.s) です。
-        // ここを基準にして、画像の下端を合わせます。
-        let bottomCenter = toS(d.x + d.s/2, d.y + d.s/2);
-        let footY = bottomCenter.y + (T_H/2) * d.s;
 
-        ctx.drawImage(a.img, bottomCenter.x - w/2, footY - h + (a.off || 0), w, h);
+        // ★南側頂点（一番手前の角）を基準にする計算
+        // 配置座標(d.x, d.y)に対してサイズ分(d.s)を足した地点が、ひし形の南側の頂点
+        let southPoint = toS(d.x + d.s, d.y + d.s);
+        
+        // 画像の横方向中央を南頂点に合わせ、
+        // 画像の下端を南頂点（地面）に合わせる
+        ctx.drawImage(a.img, southPoint.x - w/2, southPoint.y - h + (a.off || 0), w, h);
 
         if(selIdx === i) {
             ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
