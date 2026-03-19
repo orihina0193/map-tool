@@ -3,38 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ポコポコ・マップエディタ</title>
+    <title>避難所レイアウト・プロト</title>
     <style>
-        :root { --panel-h: 160px; }
-        body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; }
-        canvas { display: block; touch-action: none; }
+        :root { --panel-h: 180px; }
+        body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; }
+        canvas { display: block; }
         
-        /* 下部操作パネル */
         #ui-panel {
             position: absolute; bottom: 0; width: 100%; height: var(--panel-h);
-            background: rgba(255,255,255,0.9); backdrop-filter: blur(5px);
-            border-top: 1px solid #ccc; display: flex; flex-direction: column;
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+            border-top: 1px solid #ccc; display: flex; flex-direction: column; z-index: 100;
         }
-        #item-list {
-            display: flex; overflow-x: auto; padding: 10px; gap: 10px; flex: 1;
-        }
+        #item-list { display: flex; overflow-x: auto; padding: 10px; gap: 10px; border-bottom: 1px solid #eee; }
         .thumb {
-            width: 70px; height: 70px; border-radius: 8px; border: 2px solid transparent;
+            width: 60px; height: 60px; border-radius: 8px; border: 2px solid transparent;
             background-size: contain; background-repeat: no-repeat; background-position: center;
             background-color: #fff; flex-shrink: 0;
         }
-        .thumb.selected { border-color: #007aff; box-shadow: 0 0 10px rgba(0,122,255,0.5); }
+        .thumb.selected { border-color: #007aff; }
+
+        #edit-tools { padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .tool-group { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+        button { padding: 5px 10px; border-radius: 5px; border: 1px solid #ccc; background: #fff; }
+        button.active { background: #007aff; color: #fff; border-color: #004da3; }
         
-        #edit-tools {
-            height: 50px; display: flex; align-items: center; padding: 0 15px;
-            gap: 15px; border-top: 1px solid #eee; font-size: 14px;
-        }
-        input[type="range"] { flex: 1; }
-        
-        #upload-btn {
-            width: 70px; height: 70px; border: 2px dashed #bbb; border-radius: 8px;
-            display: flex; justify-content: center; align-items: center; font-size: 30px; color: #999;
-        }
+        #nudge-grid { display: grid; grid-template-columns: repeat(3, 1fr); width: 90px; }
+        #upload-btn { width: 60px; height: 60px; border: 2px dashed #bbb; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 24px; color: #999; }
     </style>
 </head>
 <body>
@@ -44,12 +38,27 @@
 <div id="ui-panel">
     <div id="item-list">
         <label id="upload-btn">＋<input type="file" id="img-in" hidden accept="image/*" multiple></label>
-        </div>
+    </div>
+    
     <div id="edit-tools">
-        <span>サイズ:</span>
-        <input type="range" id="size-slider" min="1" max="10" value="1" disabled>
-        <button id="del-btn" disabled>削除</button>
-        <button id="clear-btn">全消去</button>
+        <div class="tool-group">
+            <button id="mode-move" class="active">移動</button>
+            <button id="mode-pen">ペン</button>
+            <button id="del-btn">削除</button>
+            <button id="clear-btn">全消去</button>
+        </div>
+        <div class="tool-group">
+            <span>サイズ:</span>
+            <input type="range" id="size-slider" min="0.5" max="8" step="0.1" value="1">
+        </div>
+        <div id="nudge-grid">
+            <span></span><button onclick="nudge(0,-0.1)">↑</button><span></span>
+            <button onclick="nudge(-0.1,0)">←</button><span></span><button onclick="nudge(0.1,0)">→</button>
+            <span></span><button onclick="nudge(0,0.1)">↓</button><span></span>
+        </div>
+        <div class="tool-group">
+            <span>ズーム: <span id="zoom-val">100%</span></span>
+        </div>
     </div>
 </div>
 
@@ -59,125 +68,160 @@ const ctx = cvs.getContext('2d');
 const imgIn = document.getElementById('img-in');
 const itemList = document.getElementById('item-list');
 const sizeSlider = document.getElementById('size-slider');
-const delBtn = document.getElementById('del-btn');
+const zoomDisp = document.getElementById('zoom-val');
 
 // 設定
-const T_W = 64, T_H = 32; // タイルサイズ
-let camera = { x: 0, y: 0, zoom: 1 };
-let assets = []; // {id, img, src}
+const T_W = 64, T_H = 32;
+let camera = { x: window.innerWidth/2, y: window.innerHeight/3, zoom: 1 };
+let assets = [];
 let mapData = []; // {x, y, assetIdx, size}
-let selectedMapIdx = -1; // 配置済みアイテムの選択
-let activeAssetIdx = -1; // 新規配置用の選択
+let lines = [];   // [{x1, y1, x2, y2}]
+let selectedIdx = -1;
+let mode = 'move'; // 'move' or 'pen'
+let isDragging = false;
+let lastPinchDist = 0;
+let penStart = null;
 
-// --- 初期化 ---
 function init() {
     cvs.width = window.innerWidth;
-    cvs.height = window.innerHeight - 160;
-    camera.x = cvs.width / 2;
-    camera.y = cvs.height / 4;
+    cvs.height = window.innerHeight - 180;
     loadData();
     render();
 }
 
-// --- 座標変換 ---
-const toScreen = (gx, gy) => ({
-    x: (gx - gy) * (T_W / 2),
-    y: (gx + gy) * (T_H / 2)
-});
+const toScreen = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
 const toGrid = (sx, sy) => {
     let x = (sx - camera.x) / camera.zoom;
     let y = (sy - camera.y) / camera.zoom;
-    let gy = (y / (T_H / 2) - x / (T_W / 2)) / 2;
-    let gx = (x / (T_W / 2) + gy);
-    return { x: Math.floor(gx), y: Math.floor(gy) };
+    let gy = (y / (T_H/2) - x / (T_W/2)) / 2;
+    let gx = (x / (T_W/2) + gy);
+    return { x: gx, y: gy };
 };
 
-// --- 描画 ---
 function render() {
     ctx.clearRect(0, 0, cvs.width, cvs.height);
     ctx.save();
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
-    // グリッド
-    ctx.strokeStyle = "rgba(0,0,0,0.1)";
-    for(let i=-10; i<=20; i++) {
-        let s = toScreen(i, -10), e = toScreen(i, 20);
+    // グリッド背景
+    ctx.strokeStyle = "rgba(0,0,0,0.05)";
+    for(let i=-20; i<=40; i++) {
+        let s = toScreen(i, -20), e = toScreen(i, 40);
         ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
-        s = toScreen(-10, i); e = toScreen(20, i);
+        s = toScreen(-20, i); e = toScreen(40, i);
         ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
     }
 
-    // アイテム描画
+    // 線引きデータ描画
+    ctx.strokeStyle = "#ff4444"; ctx.lineWidth = 3;
+    lines.forEach(l => {
+        let p1 = toScreen(l.x1, l.y1), p2 = toScreen(l.x2, l.y2);
+        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+    });
+
+    // 建物描画
     mapData.forEach((d, idx) => {
         const asset = assets[d.assetIdx];
         if(!asset) return;
         let pos = toScreen(d.x, d.y);
         let w = T_W * d.size;
         let h = (asset.img.height / asset.img.width) * w;
-        
-        // アイソメトリックな位置調整
+        // 地面接地調整：d.sizeに合わせつつ、描画
         ctx.drawImage(asset.img, pos.x - w/2, pos.y - h + (T_H/2)*d.size, w, h);
 
-        // 選択中の枠線
-        if(selectedMapIdx === idx) {
-            ctx.strokeStyle = "#007aff"; ctx.lineWidth = 3;
-            drawIsoRect(d.x, d.y, d.size);
+        if(selectedIdx === idx) {
+            ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
+            let p1 = toScreen(d.x, d.y), p2 = toScreen(d.x+d.size, d.y);
+            let p3 = toScreen(d.x+d.size, d.y+d.size), p4 = toScreen(d.x, d.y+d.size);
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y); ctx.closePath(); ctx.stroke();
         }
     });
     ctx.restore();
 }
 
-function drawIsoRect(gx, gy, size) {
-    let p1 = toScreen(gx, gy), p2 = toScreen(gx+size, gy);
-    let p3 = toScreen(gx+size, gy+size), p4 = toScreen(gx, gy+size);
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-    ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
-    ctx.closePath(); ctx.stroke();
-}
-
-// --- イベント ---
+// タッチイベント
+let lastT = {x:0, y:0};
 cvs.addEventListener('touchstart', e => {
+    isDragging = true;
     const t = e.touches[0];
+    lastT = {x: t.clientX, y: t.clientY};
+    
+    if(e.touches.length === 2) {
+        lastPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        return;
+    }
+
     const g = toGrid(t.clientX, t.clientY);
-    
-    // 配置済みをクリックしたか判定
-    let hit = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
-    
-    if(hit !== -1) {
-        selectedMapIdx = hit;
-        sizeSlider.disabled = false;
-        sizeSlider.value = mapData[hit].size;
-        delBtn.disabled = false;
-    } else if(activeAssetIdx !== -1) {
-        mapData.push({x: g.x, y: g.y, assetIdx: activeAssetIdx, size: 1});
-        selectedMapIdx = mapData.length - 1;
-        saveData();
+    if(mode === 'pen') {
+        penStart = {x: Math.round(g.x), y: Math.round(g.y)};
     } else {
-        selectedMapIdx = -1;
-        sizeSlider.disabled = true;
-        delBtn.disabled = true;
+        let hit = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
+        if(hit !== -1) {
+            selectedIdx = hit;
+            sizeSlider.value = mapData[hit].size;
+        } else if(window.activeAssetIdx !== undefined) {
+            mapData.push({x: Math.floor(g.x), y: Math.floor(g.y), assetIdx: window.activeAssetIdx, size: 1});
+            selectedIdx = mapData.length - 1;
+        }
     }
     render();
 });
 
-// リサイズ・削除
-sizeSlider.oninput = () => {
-    if(selectedMapIdx !== -1) {
-        mapData[selectedMapIdx].size = parseInt(sizeSlider.value);
+cvs.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const t = e.touches[0];
+    if(e.touches.length === 2) {
+        let dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        camera.zoom *= (dist / lastPinchDist);
+        lastPinchDist = dist;
+        zoomDisp.innerText = Math.round(camera.zoom * 100) + "%";
+    } else {
+        // ペンモード以外ならカメラ移動
+        if(mode !== 'pen') {
+            camera.x += (t.clientX - lastT.x);
+            camera.y += (t.clientY - lastT.y);
+        }
+    }
+    lastT = {x: t.clientX, y: t.clientY};
+    render();
+});
+
+cvs.addEventListener('touchend', e => {
+    if(mode === 'pen' && penStart) {
+        const g = toGrid(lastT.x, lastT.y);
+        lines.push({x1: penStart.x, y1: penStart.y, x2: Math.round(g.x), y2: Math.round(g.y)});
+        penStart = null;
+        saveData();
+    }
+    isDragging = false;
+    render();
+    saveData();
+});
+
+function nudge(dx, dy) {
+    if(selectedIdx !== -1) {
+        mapData[selectedIdx].x += dx;
+        mapData[selectedIdx].y += dy;
         render(); saveData();
     }
-};
-delBtn.onclick = () => {
-    if(selectedMapIdx !== -1) {
-        mapData.splice(selectedMapIdx, 1);
-        selectedMapIdx = -1; render(); saveData();
+}
+
+sizeSlider.oninput = () => {
+    if(selectedIdx !== -1) {
+        mapData[selectedIdx].size = parseFloat(sizeSlider.value);
+        render();
     }
 };
 
-// 画像アップロード
-imgIn.onchange = async (e) => {
+document.getElementById('mode-move').onclick = () => { mode = 'move'; updateBtns(); };
+document.getElementById('mode-pen').onclick = () => { mode = 'pen'; updateBtns(); };
+function updateBtns() {
+    document.getElementById('mode-move').classList.toggle('active', mode==='move');
+    document.getElementById('mode-pen').classList.toggle('active', mode==='pen');
+}
+
+imgIn.onchange = (e) => {
     for(let file of e.target.files) {
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -185,7 +229,15 @@ imgIn.onchange = async (e) => {
             img.src = ev.target.result;
             img.onload = () => {
                 assets.push({img, src: img.src});
-                createThumb(assets.length - 1);
+                const idx = assets.length - 1;
+                const div = document.createElement('div');
+                div.className = 'thumb'; div.style.backgroundImage = `url(${img.src})`;
+                div.onclick = () => {
+                    document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected'));
+                    div.classList.add('selected');
+                    window.activeAssetIdx = idx;
+                };
+                itemList.appendChild(div);
                 saveData();
             };
         };
@@ -193,48 +245,28 @@ imgIn.onchange = async (e) => {
     }
 };
 
-function createThumb(idx) {
-    const div = document.createElement('div');
-    div.className = 'thumb';
-    div.style.backgroundImage = `url(${assets[idx].src})`;
-    div.onclick = () => {
-        document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected'));
-        div.classList.add('selected');
-        activeAssetIdx = idx;
-    };
-    itemList.appendChild(div);
-}
-
-// --- 保存関連 ---
 function saveData() {
-    const data = {
-        map: mapData,
-        images: assets.map(a => a.src) // 画像もBase64で保存（容量注意）
-    };
-    localStorage.setItem('iso_map_save', JSON.stringify(data));
+    localStorage.setItem('map_v2', JSON.stringify({map: mapData, lines: lines, imgs: assets.map(a => a.src)}));
 }
-
 function loadData() {
-    const saved = localStorage.getItem('iso_map_save');
+    const saved = localStorage.getItem('map_v2');
     if(!saved) return;
-    const data = JSON.parse(saved);
-    mapData = data.map;
-    data.images.forEach((src, i) => {
-        const img = new Image();
-        img.src = src;
+    const d = JSON.parse(saved);
+    mapData = d.map || []; lines = d.lines || [];
+    d.imgs.forEach((src, i) => {
+        const img = new Image(); img.src = src;
         img.onload = () => {
             assets[i] = {img, src};
-            createThumb(i);
+            const div = document.createElement('div');
+            div.className = 'thumb'; div.style.backgroundImage = `url(${src})`;
+            div.onclick = () => { window.activeAssetIdx = i; };
+            itemList.appendChild(div);
             render();
         };
     });
 }
-
-document.getElementById('clear-btn').onclick = () => {
-    if(confirm("全消去しますか？")) {
-        mapData = []; localStorage.removeItem('iso_map_save'); render();
-    }
-};
+document.getElementById('del-btn').onclick = () => { if(selectedIdx!==-1){ mapData.splice(selectedIdx, 1); selectedIdx=-1; render(); saveData(); }};
+document.getElementById('clear-btn').onclick = () => { if(confirm("消去？")){ mapData=[]; lines=[]; render(); saveData(); }};
 
 init();
 </script>
