@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v23.5</title>
+    <title>避難所レイアウト v23.6</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -79,7 +79,6 @@ function render() {
         let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
     });
 
-    // 描画時のみZオーダーでソート
     let drawableMap = map.map((d, i) => ({ ...d, originalIdx: i }));
     drawableMap.sort((a, b) => (a.x + a.y + a.s) - (b.x + b.y + b.s) || a.y - b.y);
 
@@ -122,14 +121,13 @@ function crop(img) {
 function addThumb(idx) {
     const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`;
     d.onclick = (e) => { 
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         setMode('move'); 
         deselectThumb(); 
         d.classList.add('selected'); 
-        activeAsset = idx; // ここを確実にセット
-        selIdx = -1; 
+        // わずかに遅延させて、マップへの即反応を防ぐ
+        setTimeout(() => { activeAsset = idx; selIdx = -1; render(); }, 10);
         offS.value = assets[idx].off || 0; 
-        render(); 
     };
     document.getElementById('item-list').appendChild(d);
 }
@@ -173,15 +171,14 @@ cvs.addEventListener('touchmove', e => {
 });
 
 cvs.addEventListener('touchend', e => {
-    if(!pinch && drag && !hasMoved && (Date.now() - touchStartTime < 250)) {
+    if(!pinch && drag && !hasMoved && (Date.now() - touchStartTime < 300)) {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
-            // 【最優先：設置】activeAssetがあるなら、他の判定を無視して置く！
+            // 【最終解決】何よりも設置を優先！
             if(activeAsset !== -1) {
                 map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
                 selIdx = map.length - 1;
             } else {
-                // 選んでいない時だけ選択処理
                 let hIdx = -1, maxZ = -1000;
                 map.forEach((d, i) => { if(g.x>=d.x && g.x<d.x+d.s && g.y>=d.y && g.y<d.y+d.s){ const z=d.x+d.y+d.s; if(z>maxZ){maxZ=z; hIdx=i;}}});
                 if(hIdx !== -1) { 
@@ -227,9 +224,9 @@ window.adjO = (v) => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(id
 sizeS.oninput = () => { if(selIdx!==-1){ map[selIdx].s=parseFloat(sizeS.value); render(); } };
 offS.oninput = () => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ assets[idx].off=parseInt(offS.value); render(); } };
 window.clearAll = () => { if(confirm("消去？")){ localStorage.clear(); location.reload(); } };
-function save() { localStorage.setItem('map_v23_5', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
+function save() { localStorage.setItem('map_v23_6', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
 function load() {
-    const s = localStorage.getItem('map_v23_5') || localStorage.getItem('map_v23_4') || localStorage.getItem('map_v23_3') || localStorage.getItem('map_v23_2') || localStorage.getItem('map_v23_1') || localStorage.getItem('map_v23') || localStorage.getItem('map_v22'); if(!s) return;
+    const s = localStorage.getItem('map_v23_6') || localStorage.getItem('map_v23_5') || localStorage.getItem('map_v23_4') || localStorage.getItem('map_v23_3') || localStorage.getItem('map_v23_2') || localStorage.getItem('map_v23_1') || localStorage.getItem('map_v23') || localStorage.getItem('map_v22'); if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
     d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets[i]={img, src:ad.src, off:ad.off}; addThumb(i); render(); }; img.src = ad.src; });
 }
