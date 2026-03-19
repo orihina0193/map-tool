@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v10 - ロック＆精密調整版</title>
+    <title>避難所レイアウト v10.1 - 修正版</title>
     <style>
         :root { --top-h: 80px; --bot-h: 180px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; }
@@ -11,7 +11,7 @@
         #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; }
         #item-list { display: flex; overflow-x: auto; gap: 10px; flex: 1; height: 100%; align-items: center; }
         #bot-panel { position: absolute; bottom: 0; width: 100%; height: var(--bot-h); background: rgba(255,255,255,0.95); border-top: 1px solid #ccc; display: grid; grid-template-columns: 100px 1fr 100px; padding: 10px; box-sizing: border-box; z-index: 100; }
-        .thumb { width: 55px; height: 55px; border-radius: 8px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; cursor: pointer;}
+        .thumb { width: 55px; height: 55px; border-radius: 8px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; }
         .thumb.selected { border-color: #007aff; box-shadow: 0 0 5px rgba(0,122,255,0.5); }
         #upload-label { width: 55px; height: 55px; border: 2px dashed #bbb; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 24px; color: #999; flex-shrink: 0; }
         #nudge-grid { display: grid; grid-template-columns: repeat(3, 30px); grid-template-rows: repeat(2, 35px); gap: 2px; align-self: center; }
@@ -19,7 +19,7 @@
         #center-ctrl { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 10px; }
         .row { display: flex; align-items: center; gap: 2px; font-size: 11px; white-space: nowrap; }
         input[type="range"] { flex: 1; margin: 0 2px; }
-        #center-ctrl button.prec-btn { padding: 2px 6px; font-size: 12px; border: 1px solid #ccc; background: #fff; border-radius: 4px;}
+        .prec-btn { padding: 2px 6px; font-size: 12px; border: 1px solid #ccc; background: #fff; border-radius: 4px; }
         #side-btns { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
         #side-btns button { padding: 6px 0; font-size: 10px; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
         #side-btns button.active { background: #007aff; color: #fff; border-color: #004da3; }
@@ -66,51 +66,65 @@
 </div>
 
 <script>
-const cvs = document.getElementById('cvs'); ctx.getContext('2d').imageSmoothingEnabled = false; // ボヤけ防止
+const cvs = document.getElementById('cvs');
 const ctx = cvs.getContext('2d');
-const imgIn = document.getElementById('img-in'); const itemList = document.getElementById('item-list');
-const sizeSlider = document.getElementById('size-slider'); const offsetSlider = document.getElementById('offset-slider');
+const imgIn = document.getElementById('img-in');
+const itemList = document.getElementById('item-list');
+const sizeSlider = document.getElementById('size-slider');
+const offsetSlider = document.getElementById('offset-slider');
 const zoomInfo = document.getElementById('zoom-info');
 
 const T_W = 64, T_H = 32;
 let camera = { x: window.innerWidth/2, y: window.innerHeight/3, zoom: 1 };
-let assets = []; // {img, src, defaultOffset} に変更
-let mapData = []; // {x, y, assetIdx, size} からoffsetを削除
+let assets = []; 
+let mapData = []; 
 let lines = [];   
-let selectedMapIdx = -1; // マップ上の建物選択
-let activeAssetIdx = -1; // 画像サムネイル選択
-let mode = 'move'; // move, pen, erase
+let selectedMapIdx = -1;
+let activeAssetIdx = -1;
+let mode = 'move';
 let isDragging = false, isPinching = false;
 let lastPinchDist = 0, lastPinchMid = {x: 0, y: 0};
-let penStart = null, currentMousePos = {x:0, y:0};
+let lastT = {x: 0, y: 0};
 
-function init() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; loadData(); render(); }
+function init() {
+    cvs.width = window.innerWidth;
+    cvs.height = window.innerHeight;
+    loadData();
+    render();
+}
+
 const toScreen = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
 const toGrid = (sx, sy) => {
-    let x = (sx - camera.x) / camera.zoom, y = (sy - camera.y) / camera.zoom;
+    let x = (sx - camera.x) / camera.zoom;
+    let y = (sy - camera.y) / camera.zoom;
     let gy = (y / (T_H/2) - x / (T_W/2)) / 2;
     let gx = (x / (T_W/2) + gy);
     return { x: gx, y: gy };
 };
 
 function render() {
-    ctx.clearRect(0, 0, cvs.width, cvs.height); ctx.save();
-    ctx.translate(camera.x, camera.y); ctx.scale(camera.zoom, camera.zoom);
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.save();
+    ctx.translate(camera.x, camera.y);
+    ctx.scale(camera.zoom, camera.zoom);
+
     ctx.strokeStyle = "rgba(0,0,0,0.05)";
     for(let i=-20; i<=40; i++) {
-        let s = toScreen(i, -20), e = toScreen(i, 40); ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
-        s = toScreen(-20, i); e = toScreen(40, i); ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+        let s = toScreen(i, -20), e = toScreen(i, 40);
+        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+        s = toScreen(-20, i); e = toScreen(40, i);
+        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
     }
-    ctx.strokeStyle = "#ff4444"; ctx.lineWidth = 3;
-    lines.forEach(l => { let p1 = toScreen(l.x1, l.y1), p2 = toScreen(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); });
 
     mapData.forEach((d, idx) => {
-        const asset = assets[d.assetIdx]; if(!asset) return;
+        const asset = assets[d.assetIdx];
+        if(!asset || !asset.img) return;
         let pos = toScreen(d.x, d.y);
-        let drawW = T_W * d.size, drawH = (asset.img.height / asset.img.width) * drawW;
-        // 【修正】画像のdefaultOffset（ロックされた位置）を適用
+        let drawW = T_W * d.size;
+        let drawH = (asset.img.height / asset.img.width) * drawW;
         let groundLevel = (T_H/2) * d.size + (asset.defaultOffset || 0);
         ctx.drawImage(asset.img, pos.x - drawW/2, pos.y - drawH + groundLevel, drawW, drawH);
+
         if(selectedMapIdx === idx) {
             ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
             let p1 = toScreen(d.x, d.y), p2 = toScreen(d.x+d.size, d.y), p3 = toScreen(d.x+d.size, d.y+d.size), p4 = toScreen(d.x, d.y+d.size);
@@ -121,31 +135,49 @@ function render() {
 }
 
 async function cropImage(originalImg) {
-    const tempCvs = document.createElement('canvas'); const tempCtx = tempCvs.getContext('2d');
-    tempCvs.width = originalImg.width; tempCvs.height = originalImg.height; tempCtx.drawImage(originalImg, 0, 0);
+    const tempCvs = document.createElement('canvas');
+    const tempCtx = tempCvs.getContext('2d');
+    tempCvs.width = originalImg.width;
+    tempCvs.height = originalImg.height;
+    tempCtx.drawImage(originalImg, 0, 0);
     const imageData = tempCtx.getImageData(0, 0, tempCvs.width, tempCvs.height);
     const data = imageData.data;
     let minX = tempCvs.width, minY = tempCvs.height, maxX = 0, maxY = 0;
     for (let y = 0; y < tempCvs.height; y++) {
         for (let x = 0; x < tempCvs.width; x++) {
             if (data[(y * tempCvs.width + x) * 4 + 3] > 10) {
-                if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+                if (x < minX) minX = x; if (x > maxX) maxX = x;
+                if (y < minY) minY = y; if (y > maxY) maxY = y;
             }
         }
     }
     if (maxX < minX) return originalImg;
-    const cropW = maxX - minX + 1, cropH = maxY - minY + 1;
-    const croppedCvs = document.createElement('canvas'); croppedCvs.width = cropW; croppedCvs.height = cropH;
+    const cropW = maxX - minX + 1;
+    const cropH = maxY - minY + 1;
+    const croppedCvs = document.createElement('canvas');
+    croppedCvs.width = cropW;
+    croppedCvs.height = cropH;
     croppedCvs.getContext('2d').drawImage(originalImg, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
-    return new Promise(resolve => { const resultImg = new Image(); resultImg.onload = () => resolve(resultImg); resultImg.src = croppedCvs.toDataURL(); });
+    return new Promise(resolve => {
+        const resultImg = new Image();
+        resultImg.onload = () => resolve(resultImg);
+        resultImg.src = croppedCvs.toDataURL();
+    });
 }
 
 imgIn.onchange = async (e) => {
     for(let file of e.target.files) {
         const reader = new FileReader();
         reader.onload = (ev) => {
-            const img = new Image(); img.src = ev.target.result;
-            img.onload = async () => { const cropped = await cropImage(img); assets.push({img: cropped, src: cropped.src, defaultOffset: 0}); addThumb(assets.length - 1); saveData(); };
+            const img = new Image();
+            img.onload = async () => {
+                const cropped = await cropImage(img);
+                assets.push({img: cropped, src: cropped.src, defaultOffset: 0});
+                addThumb(assets.length - 1);
+                saveData();
+                render();
+            };
+            img.src = ev.target.result;
         };
         reader.readAsDataURL(file);
     }
@@ -153,94 +185,12 @@ imgIn.onchange = async (e) => {
 
 cvs.addEventListener('touchstart', e => {
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
-    if(e.touches.length >= 2) { isPinching = true; lastPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); lastPinchMid = {x: (e.touches[0].clientX + e.touches[1].clientX)/2, y: (e.touches[0].clientY + e.touches[1].clientY)/2}; return; }
+    if(e.touches.length >= 2) {
+        isPinching = true;
+        lastPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        lastPinchMid = {x: (e.touches[0].clientX + e.touches[1].clientX)/2, y: (e.touches[0].clientY + e.touches[1].clientY)/2};
+        return;
+    }
     isDragging = true;
     if(t.clientY < 80 || t.clientY > window.innerHeight - 180) return;
-    const g = toGrid(t.clientX, t.clientY);
-    if(mode === 'move') {
-        let hitIdx = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
-        if(hitIdx !== -1) { 
-            selectedMapIdx = hitIdx; activeAssetIdx = -1; // マップの建物を選択、画像選択を解除
-            sizeSlider.value = mapData[hitIdx].size; offsetSlider.value = assets[mapData[hitIdx].assetIdx].defaultOffset || 0; // その建物の画像オフセットをスライダーに反映
-            sizeSlider.disabled = false; offsetSlider.disabled = false; // 有効化
-        } else if(activeAssetIdx !== -1) {
-            // 画像が選択されていればポンポン配置
-            mapData.push({x: Math.floor(g.x), y: Math.floor(g.y), assetIdx: activeAssetIdx, size: 1});
-            selectedMapIdx = mapData.length - 1; // 配置した建物を選択
-        } else {
-            selectedMapIdx = -1; sizeSlider.disabled = true; offsetSlider.disabled = true; // 解除
-        }
-    } else if(mode === 'erase') {
-        let hitIdx = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
-        if(hitIdx !== -1) { mapData.splice(hitIdx, 1); selectedMapIdx = -1; }
-    }
-    render();
-});
-
-cvs.addEventListener('touchmove', e => {
-    e.preventDefault(); const t = e.touches[0];
-    if(isPinching && e.touches.length >= 2) {
-        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); const mid = {x: (e.touches[0].clientX + e.touches[1].clientX)/2, y: (e.touches[0].clientY + e.touches[1].clientY)/2}; const zoomFactor = dist / lastPinchDist;
-        camera.x = mid.x - (mid.x - camera.x) * zoomFactor + (mid.x - lastPinchMid.x); camera.y = mid.y - (mid.y - camera.y) * zoomFactor + (mid.y - lastPinchMid.y); camera.zoom *= zoomFactor;
-        lastPinchDist = dist; lastPinchMid = mid; zoomInfo.innerText = "Zoom: " + Math.round(camera.zoom * 100) + "%";
-    } else if(isDragging) { if(selectedMapIdx === -1) { camera.x += (t.clientX - lastT.x); camera.y += (t.clientY - lastT.y); } lastT = {x: t.clientX, y: t.clientY}; }
-    render();
-});
-cvs.addEventListener('touchend', () => { isPinching = false; isDragging = false; saveData(); });
-
-function nudge(dx, dy) { if(selectedMapIdx !== -1) { mapData[selectedMapIdx].x += dx; mapData[selectedMapIdx].y += dy; render(); saveData(); } }
-
-// スライダー・-+ボタンの処理
-const adj = (id, target, prop, delta, step) => {
-    document.getElementById(id).onclick = () => {
-        if(selectedMapIdx === -1 && activeAssetIdx === -1) return;
-        let v = 0;
-        if(prop === 'size' && selectedMapIdx !== -1) {
-            v = parseFloat(mapData[selectedMapIdx].size); v = Math.max(0.1, Math.min(10, v + delta)); mapData[selectedMapIdx].size = v; sizeSlider.value = v;
-        } else if(prop === 'offset' && (selectedMapIdx !== -1 || activeAssetIdx !== -1)) {
-            // 接地位置は、画像選択中ならその画像を、建物選択中ならその画像のオフセットを変更
-            let idx = (selectedMapIdx !== -1) ? mapData[selectedMapIdx].assetIdx : activeAssetIdx;
-            v = assets[idx].defaultOffset || 0; v = Math.max(-100, Math.min(100, v + delta)); assets[idx].defaultOffset = v; offsetSlider.value = v;
-        }
-        render(); saveData();
-    };
-};
-// サイズ
-adj('size-minus', sizeSlider, 'size', -0.1); adj('size-plus', sizeSlider, 'size', 0.1);
-sizeSlider.oninput = () => { if(selectedMapIdx !== -1) { mapData[selectedMapIdx].size = parseFloat(sizeSlider.value); render(); saveData(); } };
-
-// 接地位置（画像選択中ならその画像を、建物選択中ならその画像のデフォルト値を変更）
-adj('offset-minus', offsetSlider, 'offset', -1); adj('offset-plus', offsetSlider, 'offset', 1);
-offsetSlider.oninput = () => {
-    if(selectedMapIdx === -1 && activeAssetIdx === -1) return;
-    let idx = (selectedMapIdx !== -1) ? mapData[selectedMapIdx].assetIdx : activeAssetIdx;
-    assets[idx].defaultOffset = parseFloat(offsetSlider.value);
-    render(); saveData();
-};
-
-const btns = ['mode-move', 'mode-pen', 'mode-erase'];
-btns.forEach(id => { document.getElementById(id).onclick = () => { mode = id.replace('mode-', ''); btns.forEach(b => document.getElementById(b).classList.toggle('active', b === id)); if(mode !== 'move') selectedMapIdx = -1; render(); }; });
-
-function addThumb(idx) {
-    const div = document.createElement('div'); div.className = 'thumb'; div.style.backgroundImage = `url(${assets[idx].src})`;
-    div.onclick = () => {
-        document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected')); div.classList.add('selected');
-        activeAssetIdx = idx; selectedMapIdx = -1; mode = 'move'; // 画像選択、建物選択を解除
-        offsetSlider.value = assets[idx].defaultOffset || 0; // その画像のデフォルトオフセットをスライダーに反映
-        offsetSlider.disabled = false; sizeSlider.disabled = true; // 接地は有効、サイズは無効
-    };
-    itemList.appendChild(div);
-}
-
-function saveData() { localStorage.setItem('map_v10', JSON.stringify({map: mapData, lines: lines, imgs: assets.map(a => ({src: a.src, offset: a.defaultOffset})) })); }
-function loadData() {
-    const saved = localStorage.getItem('map_v10'); if(!saved) return; const d = JSON.parse(saved); mapData = d.map || []; lines = d.lines || [];
-    d.imgs.forEach((imgData, i) => {
-        const img = new Image(); img.src = imgData.src; img.onload = () => { assets[i] = {img, src: imgData.src, defaultOffset: imgData.offset}; addThumb(i); render(); };
-    });
-}
-document.getElementById('clear-btn').onclick = () => { if(confirm("消去？")){ localStorage.clear(); location.reload(); }};
-init();
-</script>
-</body>
-</html>
+    const g
