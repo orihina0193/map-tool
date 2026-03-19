@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.6</title>
+    <title>避難所レイアウト v22.7</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -70,43 +70,51 @@ function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
     
-    // グリッド描画
+    // グリッド
     ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
     for(let i=-20; i<=40; i++){
         let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
     
-    // 赤い線
-    ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
-    edgeLines.forEach(l => {
-        let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-    });
+    // 重なり順を考慮してソート (奥のタイルを先に描く)
+    const sortedMap = [...map].sort((a, b) => (a.x + a.y) - (b.x + b.y));
 
-    // オブジェクト描画
-    map.forEach((d, i) => {
+    sortedMap.forEach((d) => {
         const a = assets[d.aIdx]; if(!a) return;
-        let w = T_W * d.s;
-        let h = (a.img.height/a.img.width) * w;
+        const w = T_W * d.s;
+        const h = (a.img.height/a.img.width) * w;
 
-        // 【決定的修正】南側（手前）頂点をアンカーにする
-        // タイルの北端座標(d.x, d.y)にサイズ(d.s)を足した地点が、タイルの一番手前の角（南端）
-        let southPoint = toS(d.x + d.s, d.y + d.s);
+        // 【最強のアンカー修正】
+        // 1. 南の角の座標を割り出す
+        const anchor = toS(d.x + d.s, d.y + d.s);
         
-        // southPoint.x, southPoint.y が「地面」の基準点
-        // 画像の下端中央をここに合わせることで、サイズを変えても足元が動かない
-        ctx.drawImage(a.img, southPoint.x - w/2, southPoint.y - h + (a.off || 0), w, h);
+        // 2. その角を「地面（画像の底辺中央）」にする
+        // 足元が不動になり、サイズを大きくすると上と左右に広がる
+        const drawX = anchor.x - w / 2;
+        const drawY = anchor.y - h + (a.off || 0);
 
-        if(selIdx === i) {
+        ctx.drawImage(a.img, drawX, drawY, w, h);
+
+        // 選択枠（これはタイルそのものの輪郭）
+        const originalIdx = map.indexOf(d);
+        if(selIdx === originalIdx) {
             ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
             let b1 = toS(d.x, d.y), b2 = toS(d.x+d.s, d.y), b3 = toS(d.x+d.s, d.y+d.s), b4 = toS(d.x, d.y+d.s);
             ctx.beginPath(); ctx.moveTo(b1.x,b1.y); ctx.lineTo(b2.x,b2.y); ctx.lineTo(b3.x,b3.y); ctx.lineTo(b4.x,b4.y); ctx.closePath(); ctx.stroke();
         }
     });
+
+    // 赤い線は最前面に
+    ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
+    edgeLines.forEach(l => {
+        let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+    });
+
     ctx.restore();
 }
 
-/* --- イベント・ユーティリティ群 --- */
+// 以下、操作系ロジック（変更なし）
 cvs.addEventListener('touchstart', e => {
     touchStartTime = Date.now(); hasMoved = false;
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
