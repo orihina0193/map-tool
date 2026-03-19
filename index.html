@@ -3,35 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v12</title>
+    <title>避難所レイアウト v13</title>
     <style>
-        :root { --top-h: 80px; --bot-h: 210px; }
+        :root { --top-h: 75px; --bot-h: 240px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
         canvas { display: block; background: #f0f0f0; }
         
-        #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.95); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; }
-        #item-list { display: flex; gap: 10px; align-items: center; }
+        /* 上部画像リスト */
+        #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; }
+        #item-list { display: flex; gap: 8px; align-items: center; }
         
-        #bot-panel { position: absolute; bottom: 0; width: 100%; height: var(--bot-h); background: rgba(255,255,255,0.98); border-top: 1px solid #ccc; padding: 10px; box-sizing: border-box; z-index: 100; }
+        .thumb { width: 50px; height: 50px; border-radius: 6px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; }
+        .thumb.selected { border-color: #007aff; border-width: 3px; box-shadow: 0 0 8px rgba(0,122,255,0.4); }
+        #upload-label { width: 50px; height: 50px; border: 2px dashed #bbb; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 20px; color: #999; flex-shrink: 0; background: #fff; }
+
+        /* 下部操作パネル */
+        #bot-panel { position: absolute; bottom: 0; width: 100%; height: var(--bot-h); background: rgba(255,255,255,0.95); border-top: 1px solid #ccc; padding: 12px; box-sizing: border-box; z-index: 100; display: flex; flex-direction: column; gap: 10px; }
+
+        /* 1段目: スライダーエリア */
+        .slider-section { display: flex; flex-direction: column; gap: 8px; }
+        .row { display: flex; align-items: center; gap: 8px; width: 100%; }
+        .row label { font-size: 12px; font-weight: bold; min-width: 30px; color: #333; }
+        input[type="range"] { flex: 1; height: 35px; }
+        .prec-btn { width: 40px; height: 35px; font-size: 18px; border: 1px solid #ccc; background: #fff; border-radius: 6px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 0 #ddd; }
+        .prec-btn:active { transform: translateY(1px); box-shadow: none; }
+
+        /* 2段目: 十字キーとモードボタン */
+        .tool-section { display: flex; justify-content: space-between; align-items: center; }
         
-        .thumb { width: 55px; height: 55px; border-radius: 8px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; }
-        .thumb.selected { border-color: #007aff; border-width: 3px; }
-        #upload-label { width: 55px; height: 55px; border: 2px dashed #bbb; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 24px; color: #999; flex-shrink: 0; background: #fff; }
+        #nudge-grid { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(2, 40px); gap: 4px; }
+        #nudge-grid button { font-size: 20px; border: 1px solid #ccc; background: #fff; border-radius: 8px; box-shadow: 0 2px 0 #ddd; }
 
-        .ctrl-container { display: flex; justify-content: space-between; gap: 5px; height: 100%; }
-        #nudge-grid { display: grid; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(2, 40px); gap: 4px; }
-        #nudge-grid button { font-size: 20px; border: 1px solid #ccc; background: #fff; border-radius: 6px; }
-
-        .sliders-box { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 0 5px; }
-        .row { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: bold; }
-        input[type="range"] { flex: 1; height: 30px; }
-        .prec-btn { width: 34px; height: 34px; font-size: 18px; border: 1px solid #ccc; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
-
-        .mode-box { display: flex; flex-direction: column; gap: 6px; }
-        .mode-box button { width: 85px; padding: 10px 0; font-size: 12px; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
-        .mode-box button.active { background: #007aff; color: #fff; }
+        .mode-box { display: flex; flex-direction: column; gap: 6px; flex: 1; margin-left: 15px; }
+        .mode-box button { height: 38px; font-size: 13px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; box-shadow: 0 2px 0 #ddd; }
+        .mode-box button.active { background: #007aff; color: #fff; border-color: #004da3; box-shadow: 0 2px 0 #004da3; }
         
-        #zoom-tag { position: absolute; top: 90px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; pointer-events: none; z-index: 50; }
+        #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; pointer-events: none; z-index: 50; }
     </style>
 </head>
 <body>
@@ -46,31 +53,33 @@
 </div>
 
 <div id="bot-panel">
-    <div class="ctrl-container">
+    <div class="slider-section">
+        <div class="row">
+            <label>ｻｲｽﾞ</label>
+            <button class="prec-btn" onclick="adjS(-0.1)">-</button>
+            <input type="range" id="size-s" min="0.1" max="5" step="0.1" value="1">
+            <button class="prec-btn" onclick="adjS(0.1)">+</button>
+        </div>
+        <div class="row">
+            <label>接地</label>
+            <button class="prec-btn" onclick="adjO(-1)">-</button>
+            <input type="range" id="off-s" min="-100" max="100" step="1" value="0">
+            <button class="prec-btn" onclick="adjO(1)">+</button>
+        </div>
+    </div>
+
+    <div class="tool-section">
         <div id="nudge-grid">
             <span></span><button onclick="nudge(0,-0.1)">↑</button><span></span>
             <button onclick="nudge(-0.1,0)">←</button><button onclick="nudge(0,0.1)">↓</button><button onclick="nudge(0.1,0)">→</button>
         </div>
         
-        <div class="sliders-box">
-            <div class="row">
-                <span>ｻｲｽﾞ</span>
-                <button class="prec-btn" onclick="adjS(-0.1)">-</button>
-                <input type="range" id="size-s" min="0.1" max="5" step="0.1" value="1">
-                <button class="prec-btn" onclick="adjS(0.1)">+</button>
-            </div>
-            <div class="row">
-                <span>接地</span>
-                <button class="prec-btn" onclick="adjO(-1)">-</button>
-                <input type="range" id="off-s" min="-100" max="100" step="1" value="0">
-                <button class="prec-btn" onclick="adjO(1)">+</button>
-            </div>
-        </div>
-
         <div class="mode-box">
-            <button id="m-move" class="active">移動配置</button>
-            <button id="m-erase">消しゴム</button>
-            <button onclick="clearAll()">全消去</button>
+            <div style="display:flex; gap:6px;">
+                <button id="m-move" class="active" style="flex:1;">移動・配置</button>
+                <button id="m-erase" style="flex:1;">消しゴム</button>
+            </div>
+            <button onclick="clearAll()" style="background:#f8f8f8; color:#888;">全データを消去</button>
         </div>
     </div>
 </div>
@@ -103,14 +112,12 @@ function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
     
-    // グリッド
     ctx.strokeStyle = "rgba(0,0,0,0.05)";
     for(let i=-20; i<=40; i++){
         let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
 
-    // 建物
     map.forEach((d, i) => {
         const a = assets[d.aIdx]; if(!a) return;
         let p = toS(d.x, d.y), w = T_W * d.s, h = (a.img.height/a.img.width)*w;
@@ -118,14 +125,13 @@ function render() {
         ctx.drawImage(a.img, p.x - w/2, p.y - h + gy, w, h);
         if(selIdx === i) {
             ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
-            let b1 = toS(d.x, d.y), b2 = toS(d.x+d.s, d.y), b3 = toS(d.x+d.s, d.y+d.s), b4 = toS(d.x, d.y+d.s);
+            let b1 = toS(d.x, d.y), b2 = toS(d.x+d.s, d.y), b3 = toS(d.x+d.s, d.y+d.size), b4 = toS(d.x, d.y+d.s);
             ctx.beginPath(); ctx.moveTo(b1.x,b1.y); ctx.lineTo(b2.x,b2.y); ctx.lineTo(b3.x,b3.y); ctx.lineTo(b4.x,b4.y); ctx.closePath(); ctx.stroke();
         }
     });
     ctx.restore();
 }
 
-// 画像追加
 document.getElementById('img-in').onchange = (e) => {
     for(let f of e.target.files) {
         const r = new FileReader();
@@ -179,7 +185,7 @@ cvs.addEventListener('touchstart', e => {
         return;
     }
     drag = true;
-    if(t.clientY < 80 || t.clientY > window.innerHeight - 210) return;
+    if(t.clientY < 75 || t.clientY > window.innerHeight - 240) return;
     const g = toG(t.clientX, t.clientY);
     if(mode === 'move') {
         let h = map.findIndex(d => g.x >= d.x && g.x < d.x+d.s && g.y >= d.y && g.y < d.y+d.s);
@@ -225,12 +231,12 @@ function updateM() {
     document.getElementById('m-erase').className = (mode==='erase'?'active':'');
 }
 
-function save() { localStorage.setItem('map_v12', JSON.stringify({m:map, a:assets.map(a=>({src:a.src, off:a.off}))})); }
+function save() { localStorage.setItem('map_v13', JSON.stringify({m:map, a:assets.map(a=>({src:a.src, off:a.off}))})); }
 function load() {
-    const s = localStorage.getItem('map_v12'); if(!s) return; const d = JSON.parse(s); map = d.m || [];
+    const s = localStorage.getItem('map_v13'); if(!s) return; const d = JSON.parse(s); map = d.m || [];
     d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets[i]={img, src:ad.src, off:ad.off}; addThumb(i); render(); }; img.src = ad.src; });
 }
-window.clearAll = () => { if(confirm("消去？")){ localStorage.clear(); location.reload(); } };
+window.clearAll = () => { if(confirm("配置データをすべて消去しますか？")){ localStorage.clear(); location.reload(); } };
 init();
 </script>
 </body>
