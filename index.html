@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト・プロト v4</title>
+    <title>避難所レイアウト v5</title>
     <style>
         :root { --top-h: 80px; --bot-h: 150px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; }
@@ -25,9 +25,8 @@
         .thumb {
             width: 55px; height: 55px; border-radius: 8px; border: 2px solid #ccc;
             background-size: contain; background-repeat: no-repeat; background-position: center;
-            background-color: #fff; flex-shrink: 0; cursor: pointer;
+            background-color: #fff; flex-shrink: 0;
         }
-        /* 選択中のスタイル */
         .thumb.selected { border-color: #007aff; box-shadow: 0 0 5px rgba(0,122,255,0.5); }
 
         #upload-label {
@@ -42,9 +41,9 @@
         .row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
         input[type="range"] { flex: 1; }
 
-        #side-btns { display: flex; flex-direction: column; gap: 5px; justify-content: center; }
-        #side-btns button { padding: 8px 0; font-size: 12px; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
-        #side-btns button.active { background: #007aff; color: #fff; }
+        #side-btns { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
+        #side-btns button { padding: 6px 0; font-size: 11px; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
+        #side-btns button.active { background: #007aff; color: #fff; border-color: #004da3; }
         
         #zoom-info { position: absolute; top: calc(var(--top-h) + 10px); right: 10px; background: rgba(0,0,0,0.5); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 12px; pointer-events: none; }
     </style>
@@ -72,14 +71,14 @@
             <input type="range" id="size-slider" min="0.1" max="10" step="0.1" value="1">
         </div>
         <div class="row" style="justify-content: center; gap: 20px;">
-            <button id="del-btn" style="color:red;">選択削除</button>
-            <button id="clear-btn">全消去</button>
+            <button id="clear-btn" style="font-size: 10px; padding: 5px;">全リセット</button>
         </div>
     </div>
 
     <div id="side-btns">
-        <button id="mode-move" class="active">移動</button>
-        <button id="mode-pen">ペン</button>
+        <button id="mode-move" class="active">移動・配置</button>
+        <button id="mode-pen">ペン(線)</button>
+        <button id="mode-erase">消しゴム</button>
     </div>
 </div>
 
@@ -97,12 +96,13 @@ let assets = [];
 let mapData = []; 
 let lines = [];   
 let selectedIdx = -1;
-let activeAssetIdx = -1; // 【追加】現在選択中の画像のインデックス
-let mode = 'move';
+let activeAssetIdx = -1;
+let mode = 'move'; // move, pen, erase
 let isDragging = false;
-let isPinching = false; // 【追加】ピンチズーム中かどうかのフラグ
+let isPinching = false;
 let lastPinchDist = 0;
 let penStart = null;
+let currentMousePos = {x:0, y:0};
 
 function init() {
     cvs.width = window.innerWidth;
@@ -126,6 +126,7 @@ function render() {
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
+    // グリッド
     ctx.strokeStyle = "rgba(0,0,0,0.05)";
     for(let i=-20; i<=40; i++) {
         let s = toScreen(i, -20), e = toScreen(i, 40);
@@ -134,12 +135,23 @@ function render() {
         ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
     }
 
+    // 線描画
     ctx.strokeStyle = "#ff4444"; ctx.lineWidth = 3;
     lines.forEach(l => {
         let p1 = toScreen(l.x1, l.y1), p2 = toScreen(l.x2, l.y2);
         ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
     });
 
+    // ペンのプレビュー
+    if(mode === 'pen' && penStart) {
+        ctx.strokeStyle = "rgba(255, 68, 68, 0.5)";
+        let g = toGrid(currentMousePos.x, currentMousePos.y);
+        let p1 = toScreen(penStart.x, penStart.y);
+        let p2 = toScreen(Math.round(g.x), Math.round(g.y));
+        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+    }
+
+    // 建物描画
     mapData.forEach((d, idx) => {
         const asset = assets[d.assetIdx];
         if(!asset) return;
@@ -158,61 +170,64 @@ function render() {
     ctx.restore();
 }
 
-let lastT = {x:0, y:0};
 cvs.addEventListener('touchstart', e => {
     isDragging = true;
     const t = e.touches[0];
-    lastT = {x: t.clientX, y: t.clientY};
+    currentMousePos = {x: t.clientX, y: t.clientY};
     
-    // 指が2本以上ならピンチモードへ
     if(e.touches.length >= 2) {
-        isPinching = true;
-        isDragging = false; // ドラッグを停止
+        isPinching = true; isDragging = false;
         lastPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         return;
-    } else {
-        isPinching = false;
     }
 
-    // パネル領域外のみ反応
     if(t.clientY < 80 || t.clientY > window.innerHeight - 150) return;
 
-    // 【修正】ピンチ中でなく、画像が選択されているときのみ配置
-    if(!isPinching && activeAssetIdx !== -1 && mode === 'move') {
-        const g = toGrid(t.clientX, t.clientY);
-        
-        // 配置済みをクリックしたか判定
-        let hit = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
-        
-        if(hit !== -1) {
-            selectedIdx = hit;
-            sizeSlider.value = mapData[hit].size;
-        } else {
-            // 画像が選択されていれば配置
+    const g = toGrid(t.clientX, t.clientY);
+
+    if(mode === 'erase') {
+        // 消しゴム: 建物を消す
+        let hitIdx = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
+        if(hitIdx !== -1) {
+            mapData.splice(hitIdx, 1);
+            selectedIdx = -1;
+        }
+        // 消しゴム: 線を消す (線分との距離が近いものを消す)
+        lines = lines.filter(l => {
+            let dist = distToSegment({x: g.x, y: g.y}, {x: l.x1, y: l.y1}, {x: l.x2, y: l.y2});
+            return dist > 0.3; // しきい値
+        });
+    } else if(mode === 'pen') {
+        penStart = {x: Math.round(g.x), y: Math.round(g.y)};
+    } else if(mode === 'move') {
+        let hitIdx = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
+        if(hitIdx !== -1) {
+            selectedIdx = hitIdx;
+            sizeSlider.value = mapData[hitIdx].size;
+        } else if(activeAssetIdx !== -1 && !isPinching) {
             mapData.push({x: Math.floor(g.x), y: Math.floor(g.y), assetIdx: activeAssetIdx, size: 1});
             selectedIdx = mapData.length - 1;
-            saveData();
         }
-    } else if(mode === 'pen' && !isPinching) {
-        const g = toGrid(t.clientX, t.clientY);
-        penStart = {x: Math.round(g.x), y: Math.round(g.y)};
     }
     render();
 });
 
 cvs.addEventListener('touchmove', e => {
     const t = e.touches[0];
+    currentMousePos = {x: t.clientX, y: t.clientY};
     if(e.touches.length >= 2 && isPinching) {
-        // ピンチズーム
         let dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         camera.zoom *= (dist / lastPinchDist);
         lastPinchDist = dist;
         zoomInfo.innerText = "Zoom: " + Math.round(camera.zoom * 100) + "%";
     } else if(isDragging && !isPinching) {
-        // カメラ移動（ペンモード以外）
-        if(mode !== 'pen') {
+        if(mode === 'move' && selectedIdx === -1) {
             camera.x += (t.clientX - lastT.x);
             camera.y += (t.clientY - lastT.y);
+        } else if (mode === 'erase') {
+            // ドラッグでも消せるように
+            const g = toGrid(t.clientX, t.clientY);
+            lines = lines.filter(l => distToSegment({x: g.x, y: g.y}, {x: l.x1, y: l.y1}, {x: l.x2, y: l.y2}) > 0.3);
         }
     }
     lastT = {x: t.clientX, y: t.clientY};
@@ -221,18 +236,27 @@ cvs.addEventListener('touchmove', e => {
 
 cvs.addEventListener('touchend', e => {
     if(mode === 'pen' && penStart && !isPinching) {
-        const g = toGrid(lastT.x, lastT.y);
-        lines.push({x1: penStart.x, y1: penStart.y, x2: Math.round(g.x), y2: Math.round(g.y)});
+        const g = toGrid(currentMousePos.x, currentMousePos.y);
+        let ex = Math.round(g.x), ey = Math.round(g.y);
+        if(penStart.x !== ex || penStart.y !== ey) {
+            lines.push({x1: penStart.x, y1: penStart.y, x2: ex, y2: ey});
+        }
         penStart = null;
-        saveData();
     }
     isDragging = false;
-    // 指が離れたらピンチモードを解除
-    if(e.touches.length < 2) {
-        isPinching = false;
-    }
+    if(e.touches.length < 2) isPinching = false;
+    saveData();
     render();
 });
+
+// 線分と点の距離計算（消しゴム用）
+function distToSegment(p, v, w) {
+    let l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
+    if (l2 == 0) return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
+    let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.sqrt(Math.pow(p.x - (v.x + t * (w.x - v.x)), 2) + Math.pow(p.y - (v.y + t * (w.y - v.y)), 2));
+}
 
 function nudge(dx, dy) {
     if(selectedIdx !== -1) {
@@ -249,12 +273,15 @@ sizeSlider.oninput = () => {
     }
 };
 
-document.getElementById('mode-move').onclick = () => { mode = 'move'; updateMode(); };
-document.getElementById('mode-pen').onclick = () => { mode = 'pen'; updateMode(); };
-function updateMode() {
-    document.getElementById('mode-move').classList.toggle('active', mode==='move');
-    document.getElementById('mode-pen').classList.toggle('active', mode==='pen');
-}
+const btns = ['mode-move', 'mode-pen', 'mode-erase'];
+btns.forEach(id => {
+    document.getElementById(id).onclick = () => {
+        mode = id.replace('mode-', '');
+        btns.forEach(b => document.getElementById(b).classList.toggle('active', b === id));
+        if(mode !== 'move') selectedIdx = -1;
+        render();
+    };
+});
 
 imgIn.onchange = (e) => {
     for(let file of e.target.files) {
@@ -276,26 +303,23 @@ function addThumb(idx) {
     const div = document.createElement('div');
     div.className = 'thumb'; div.style.backgroundImage = `url(${assets[idx].src})`;
     div.onclick = () => {
-        // 【修正】トグル選択
         if(activeAssetIdx === idx) {
-            // すでに選択されているなら解除
-            div.classList.remove('selected');
-            activeAssetIdx = -1;
+            div.classList.remove('selected'); activeAssetIdx = -1;
         } else {
-            // 新しく選択
             document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected'));
-            div.classList.add('selected');
-            activeAssetIdx = idx;
+            div.classList.add('selected'); activeAssetIdx = idx;
+            mode = 'move'; // 画像を選んだら自動で配置モードへ
+            btns.forEach(b => document.getElementById(b).classList.toggle('active', b === 'mode-move'));
         }
     };
     itemList.appendChild(div);
 }
 
 function saveData() {
-    localStorage.setItem('map_v4', JSON.stringify({map: mapData, lines: lines, imgs: assets.map(a => a.src)}));
+    localStorage.setItem('map_v5', JSON.stringify({map: mapData, lines: lines, imgs: assets.map(a => a.src)}));
 }
 function loadData() {
-    const saved = localStorage.getItem('map_v4');
+    const saved = localStorage.getItem('map_v5');
     if(!saved) return;
     const d = JSON.parse(saved);
     mapData = d.map || []; lines = d.lines || [];
@@ -308,9 +332,9 @@ function loadData() {
         };
     });
 }
-document.getElementById('del-btn').onclick = () => { if(selectedIdx!==-1){ mapData.splice(selectedIdx, 1); selectedIdx=-1; render(); saveData(); }};
-document.getElementById('clear-btn').onclick = () => { if(confirm("消去？")){ mapData=[]; lines=[]; render(); saveData(); }};
+document.getElementById('clear-btn').onclick = () => { if(confirm("データをすべて消去してリセットしますか？")){ localStorage.clear(); location.reload(); }};
 
+let lastT = {x:0, y:0};
 init();
 </script>
 </body>
