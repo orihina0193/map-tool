@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v24</title>
+    <title>避難所レイアウト v24.1</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -119,14 +119,15 @@ function crop(img) {
 }
 
 function addThumb(idx) {
-    const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`;
+    const d = document.createElement('div'); d.className = 'thumb'; d.id = 'thumb-' + idx;
+    d.style.backgroundImage = `url(${assets[idx].src})`;
     d.onclick = (e) => { 
         e.preventDefault(); e.stopPropagation();
         setMode('move'); 
         deselectThumb(); 
         d.classList.add('selected'); 
-        activeAsset = idx; 
-        selIdx = -1; // 画像を選んだら、現在選択中の建物を強制解除
+        activeAsset = idx; // この画像を「持ちっぱなし」にする
+        selIdx = -1;
         render(); 
     };
     document.getElementById('item-list').appendChild(d);
@@ -146,7 +147,7 @@ cvs.addEventListener('touchstart', e => {
 
 cvs.addEventListener('touchmove', e => {
     e.preventDefault(); const t = e.touches[0];
-    if(Math.hypot(t.clientX - lastT.x, t.clientY - lastT.y) > 3) hasMoved = true; // 判定を少し甘く
+    if(Math.hypot(t.clientX - lastT.x, t.clientY - lastT.y) > 2) hasMoved = true;
     if(pinch && e.touches.length >= 2) {
         let d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
         let m = {x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
@@ -175,13 +176,11 @@ cvs.addEventListener('touchend', e => {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
             if(activeAsset !== -1) {
-                // 画像が選ばれているなら「設置」を最優先
+                // 画像を持っている時は即座に「設置」して、選択は継続！
                 map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)}); 
-                selIdx = map.length-1;
-                activeAsset = -1; // 設置したら一旦未選択に戻す（誤爆防止）
-                deselectThumb();
+                selIdx = map.length - 1; // 置いたものを選択状態にする（サイズ調整用）
             } else {
-                // 画像が選ばれていないなら「選択」を試みる
+                // 画像を持っていない時だけ「選択」
                 let hIdx = -1, maxZ = -1000;
                 map.forEach((d, i) => { if(g.x>=d.x && g.x<d.x+d.s && g.y>=d.y && g.y<d.y+d.s){ const z=d.x+d.y+d.s; if(z>maxZ){maxZ=z; hIdx=i;}}});
                 if(hIdx !== -1) { 
@@ -225,9 +224,9 @@ window.adjO = (v) => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(id
 sizeS.oninput = () => { if(selIdx!==-1){ map[selIdx].s=parseFloat(sizeS.value); render(); } };
 offS.oninput = () => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ assets[idx].off=parseInt(offS.value); render(); } };
 window.clearAll = () => { if(confirm("消去？")){ localStorage.clear(); location.reload(); } };
-function save() { localStorage.setItem('map_v24', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
+function save() { localStorage.setItem('map_v24_1', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
 function load() {
-    const s = localStorage.getItem('map_v24') || localStorage.getItem('map_v23_2') || localStorage.getItem('map_v23_1'); if(!s) return;
+    const s = localStorage.getItem('map_v24_1') || localStorage.getItem('map_v24') || localStorage.getItem('map_v23_2'); if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
     d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets[i]={img, src:ad.src, off:ad.off}; addThumb(i); render(); }; img.src = ad.src; });
 }
