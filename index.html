@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.8.1</title>
+    <title>避難所レイアウト v22.8.2</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -29,7 +29,7 @@
         .mode-row button.active { background: #ff3b30; color: #fff; border-color: #c41e16; }
         #m-move.active { background: #007aff; border-color: #004da3; }
         #m-erase.active { background: #8e8e93; border-color: #636366; }
-        .clear-btn { height: 32px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #666; }
+        .clear-btn { height: 32px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; font-weight: bold; }
         #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; z-index: 50; }
     </style>
 </head>
@@ -46,7 +46,7 @@
         <div id="nudge-grid"><span></span><button onclick="nudge(0,-0.1)">↑</button><span></span><button onclick="nudge(-0.1,0)">←</button><button onclick="nudge(0,0.1)">↓</button><button onclick="nudge(0.1,0)">→</button></div>
         <div class="mode-box">
             <div class="mode-row"><button id="m-move">移動</button><button id="m-pen">ペン</button><button id="m-erase">消去</button></div>
-            <button class="clear-btn" onclick="clearAll()">全消去</button>
+            <button class="clear-btn" onclick="clearAll()">データリセット</button>
         </div>
     </div>
 </div>
@@ -60,7 +60,6 @@ let drag = false, pinch = false, lastDist = 0, lastMid = {x:0, y:0}, lastT = {x:
 let touchStartTime = 0, hasMoved = false;
 
 function init() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; load(); setMode('move'); render(); }
-
 const toS = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
 const toG = (sx, sy) => {
     let x = (sx - cam.x)/cam.z, y = (sy - cam.y)/cam.z;
@@ -78,31 +77,34 @@ function render() {
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
     
-    // オブジェクト描画 (奥優先ソート)
-    const sortedMap = [...map].sort((a, b) => (a.x + a.y) - (b.x + b.y));
-    sortedMap.forEach((d) => {
-        const a = assets[d.aIdx]; if(!a) return;
-        const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
-        const anchor = toS(d.x + 1, d.y + 1); // 南端固定
-        ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + (a.off || 0), w, h);
+    // 描画物を統合してソート（線も画像も座標の合計値で奥から順に描く）
+    let drawList = [];
+    map.forEach((d, i) => drawList.push({ type: 'img', data: d, sort: d.x + d.s + d.y + d.s, originalIdx: i }));
+    edgeLines.forEach((l, i) => drawList.push({ type: 'line', data: l, sort: Math.max(l.x1, l.x2) + Math.max(l.y1, l.y2), originalIdx: i }));
+    
+    drawList.sort((a, b) => a.sort - b.sort);
 
-        const originalIdx = map.indexOf(d);
-        if(selIdx === originalIdx) {
-            ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
-            let pS = anchor, pW = {x:anchor.x-(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pE = {x:anchor.x+(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pN = {x:anchor.x, y:anchor.y-T_H*d.s};
-            ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke();
+    drawList.forEach(obj => {
+        if(obj.type === 'img') {
+            const d = obj.data; const a = assets[d.aIdx]; if(!a) return;
+            const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
+            const anchor = toS(d.x + 1, d.y + 1);
+            ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + (a.off || 0), w, h);
+            if(selIdx === obj.originalIdx) {
+                ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
+                let pS = anchor, pW = {x:anchor.x-(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pE = {x:anchor.x+(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pN = {x:anchor.x, y:anchor.y-T_H*d.s};
+                ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke();
+            }
+        } else {
+            const l = obj.data;
+            ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
+            let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2);
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
         }
-    });
-
-    // 赤い線 (ペンツール)
-    ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
-    edgeLines.forEach(l => {
-        let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
     });
     ctx.restore();
 }
 
-// タッチ操作系
 cvs.addEventListener('touchstart', e => {
     touchStartTime = Date.now(); hasMoved = false;
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
@@ -123,18 +125,13 @@ cvs.addEventListener('touchmove', e => {
         let f = d / lastDist; cam.x = m.x - (m.x - cam.x)*f + (m.x - lastMid.x); cam.y = m.y - (m.y - cam.y)*f + (m.y - lastMid.y);
         cam.z *= f; lastDist = d; lastMid = m; document.getElementById('zoom-tag').innerText = "Zoom: "+Math.round(cam.z*100)+"%";
     } else if(drag) {
-        const g = toG(t.clientX, t.clientY);
-        const prevG = toG(lastT.x, lastT.y);
+        const g = toG(t.clientX, t.clientY); const prevG = toG(lastT.x, lastT.y);
         if(mode === 'pen') {
-            // ペンの判定座標をグリッドに丸める（微調整対応）
             let curX = Math.round(g.x), curY = Math.round(g.y);
             let oldX = Math.round(prevG.x), oldY = Math.round(prevG.y);
             if(curX !== oldX || curY !== oldY) { addEdgeLine(oldX, oldY, curX, curY); }
-        } else if(mode === 'erase') { 
-            removeEdgeLine(g.x, g.y); 
-        } else if(mode === 'move' && selIdx === -1 && activeAsset === -1) {
-            cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y);
-        }
+        } else if(mode === 'erase') { removeEdgeLine(g.x, g.y); }
+        else if(mode === 'move' && selIdx === -1 && activeAsset === -1) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
     }
     lastT = {x: t.clientX, y: t.clientY}; render();
 });
@@ -143,10 +140,17 @@ cvs.addEventListener('touchend', e => {
     if(!pinch && drag && !hasMoved && (Date.now() - touchStartTime < 250)) {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
-            let h = map.findIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
-            if(h !== -1) { selIdx = h; activeAsset = -1; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; }
-            else if(activeAsset !== -1) { map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)}); selIdx = map.length-1; }
-            else { selIdx = -1; }
+            // 画像選択中なら、既存の建物選択をスキップして即配置！
+            if(activeAsset !== -1) {
+                map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
+                selIdx = map.length-1;
+            } else {
+                let h = map.findIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
+                if(h !== -1) { 
+                    selIdx = h; sizeS.value = map[h].s; 
+                    offS.value = assets[map[h].aIdx].off || 0;
+                } else { selIdx = -1; }
+            }
         } else if(mode === 'erase') {
             let h = map.findIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
             if(h !== -1) map.splice(h, 1);
@@ -156,7 +160,6 @@ cvs.addEventListener('touchend', e => {
 });
 
 function addEdgeLine(gx1, gy1, gx2, gy2) {
-    // 同じ場所への重複描画を防止
     if(gx1 === gx2 && gy1 === gy2) return;
     const key = [gx1, gy1, gx2, gy2].sort((a,b)=>a-b).join(',');
     if(!edgeLines.some(l => [l.x1, l.y1, l.x2, l.y2].sort((a,b)=>a-b).join(',') === key)) {
@@ -165,10 +168,8 @@ function addEdgeLine(gx1, gy1, gx2, gy2) {
 }
 function removeEdgeLine(gx, gy) {
     let x = Math.round(gx), y = Math.round(gy);
-    edgeLines = edgeLines.filter(l => !((Math.abs(l.x1-x)<0.5 && Math.abs(l.y1-y)<0.5) || (Math.abs(l.x2-x)<0.5 && Math.abs(l.y2-y)<0.5)));
+    edgeLines = edgeLines.filter(l => !((Math.abs(l.x1-x)<0.6 && Math.abs(l.y1-y)<0.6) || (Math.abs(l.x2-x)<0.6 && Math.abs(l.y2-y)<0.6)));
 }
-
-// UI操作系 (中略: 保存・読込等は変更なし)
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
 function setMode(m) {
     mode = m; selIdx = -1; if(m !== 'move') activeAsset = -1;
@@ -204,10 +205,21 @@ function crop(img) {
 }
 function addThumb(idx) {
     const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`;
-    d.onclick = () => { setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); activeAsset = idx; selIdx = -1; render(); };
+    d.onclick = () => { 
+        setMode('move'); 
+        document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); 
+        d.classList.add('selected'); 
+        activeAsset = idx; selIdx = -1; 
+        offS.value = assets[idx].off || 0;
+        render(); 
+    };
     document.getElementById('item-list').appendChild(d);
 }
-function save() { localStorage.setItem('map_v28', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
+function save() { 
+    localStorage.setItem('map_v28', JSON.stringify({
+        m: map, el: edgeLines, a: assets.map(a=>({src:a.src, off:a.off}))
+    })); 
+}
 function load() {
     const s = localStorage.getItem('map_v28'); if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
@@ -218,7 +230,13 @@ window.adjS = (v) => { if(selIdx!==-1){ let n = parseFloat(sizeS.value)+v; n=Mat
 window.adjO = (v) => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ let n=parseInt(offS.value)+v; offS.value=n; assets[idx].off=n; render(); save(); } };
 sizeS.oninput = () => { if(selIdx!==-1){ map[selIdx].s=parseFloat(sizeS.value); render(); } };
 offS.oninput = () => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ assets[idx].off=parseInt(offS.value); render(); } };
-window.clearAll = () => { if(confirm("消去？")){ localStorage.clear(); location.reload(); } };
+
+window.clearAll = () => { 
+    if(confirm("【警告】すべての配置データと画像を完全にリセットしますか？")){ 
+        localStorage.clear(); 
+        location.reload(); 
+    } 
+};
 init();
 </script>
 </body>
