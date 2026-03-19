@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.9.2 (配置復元版)</title>
+    <title>避難所レイアウト v22.9.3</title>
     <style>
-        :root { --top-h: 75px; --bot-h: 260px; }
+        :root { --top-h: 75px; --bot-h: 270px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
         canvas { display: block; background: #f0f0f0; }
         #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; }
@@ -26,14 +26,15 @@
         .mode-row { display: flex; gap: 4px; }
         .mode-row button { flex: 1; height: 40px; font-size: 11px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
         .mode-row button.active { background: #007aff; color: #fff; border-color: #004da3; }
-        .save-btn { height: 45px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; margin-top: 5px; }
+        .clear-btn { height: 30px; font-size: 10px; background: #fff; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; font-weight: bold; }
+        .save-btn { height: 45px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
         #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; z-index: 50; }
     </style>
 </head>
 <body>
 <canvas id="cvs"></canvas>
 <div id="zoom-tag">Zoom: 100%</div>
-<div id="top-panel"><div id="item-list"><button class="deselect-btn" onclick="deselect()">解除</button><label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple></label></div></div>
+<div id="top-panel"><div id="item-list"><button class="deselect-btn" onclick="deselect()">選択<br>解除</button><label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple></label></div></div>
 <div id="bot-panel">
     <div class="row"><label>サイズ</label><button class="prec-btn" onclick="adjS(-0.1)">-</button><input type="range" id="size-s" min="0.1" max="5" step="0.1" value="1"><button class="prec-btn" onclick="adjS(0.1)">+</button></div>
     <div class="row"><label>接地</label><button class="prec-btn" onclick="adjO(-1)">-</button><input type="range" id="off-s" min="-100" max="100" step="1" value="0"><button class="prec-btn" onclick="adjO(1)">+</button></div>
@@ -41,7 +42,8 @@
         <div id="nudge-grid"><span></span><button onclick="nudge(0,-0.1)">↑</button><span></span><button onclick="nudge(-0.1,0)">←</button><button onclick="nudge(0,0.1)">↓</button><button onclick="nudge(0.1,0)">→</button></div>
         <div class="mode-box">
             <div class="mode-row"><button id="m-move">移動</button><button id="m-pen">ペン</button><button id="m-erase">消去</button></div>
-            <button class="save-btn" onclick="exportImage()">📷 画像として保存 (PNG)</button>
+            <button class="clear-btn" onclick="clearAll()">データリセット</button>
+            <button class="save-btn" onclick="exportImage()">📷 画像として保存</button>
         </div>
     </div>
 </div>
@@ -191,6 +193,7 @@ function load() {
 window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; render(); save(); } };
 window.adjS = (v) => { if(selIdx!==-1){ let n=parseFloat(sizeS.value)+v; n=Math.max(0.1,n); sizeS.value=n; map[selIdx].s=n; render(); save(); } };
 window.adjO = (v) => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1 && assets[idx]){ assets[idx].off+=v; offS.value=assets[idx].off; render(); save(); } };
+window.clearAll = () => { if(confirm("消去しますか？")){ localStorage.clear(); location.reload(); } };
 init();
 </script>
 </body>
