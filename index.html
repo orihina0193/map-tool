@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v23.4</title>
+    <title>避難所レイアウト v23.5</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -69,21 +69,17 @@ const toG = (sx, sy) => {
 function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
-    
-    // グリッド描画
     ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
     for(let i=-20; i<=40; i++){
         let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
-    
-    // 赤線描画
     ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
     edgeLines.forEach(l => {
         let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
     });
 
-    // 【重要】手前優先のソート描画
+    // 描画時のみZオーダーでソート
     let drawableMap = map.map((d, i) => ({ ...d, originalIdx: i }));
     drawableMap.sort((a, b) => (a.x + a.y + a.s) - (b.x + b.y + b.s) || a.y - b.y);
 
@@ -100,7 +96,6 @@ function render() {
     ctx.restore();
 }
 
-// 初期と同じシンプルな画像追加
 document.getElementById('img-in').onchange = (e) => {
     for(let f of e.target.files) {
         const r = new FileReader();
@@ -131,7 +126,7 @@ function addThumb(idx) {
         setMode('move'); 
         deselectThumb(); 
         d.classList.add('selected'); 
-        activeAsset = idx; // これで「ぽんぽん設置」が有効になる
+        activeAsset = idx; // ここを確実にセット
         selIdx = -1; 
         offS.value = assets[idx].off || 0; 
         render(); 
@@ -181,12 +176,12 @@ cvs.addEventListener('touchend', e => {
     if(!pinch && drag && !hasMoved && (Date.now() - touchStartTime < 250)) {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
-            // 【復活：初期設置ロジック】activeAssetがあれば即設置！
+            // 【最優先：設置】activeAssetがあるなら、他の判定を無視して置く！
             if(activeAsset !== -1) {
                 map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
                 selIdx = map.length - 1;
             } else {
-                // 選んでいなければ既存の建物から手前のものを選択
+                // 選んでいない時だけ選択処理
                 let hIdx = -1, maxZ = -1000;
                 map.forEach((d, i) => { if(g.x>=d.x && g.x<d.x+d.s && g.y>=d.y && g.y<d.y+d.s){ const z=d.x+d.y+d.s; if(z>maxZ){maxZ=z; hIdx=i;}}});
                 if(hIdx !== -1) { 
@@ -232,9 +227,9 @@ window.adjO = (v) => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(id
 sizeS.oninput = () => { if(selIdx!==-1){ map[selIdx].s=parseFloat(sizeS.value); render(); } };
 offS.oninput = () => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ assets[idx].off=parseInt(offS.value); render(); } };
 window.clearAll = () => { if(confirm("消去？")){ localStorage.clear(); location.reload(); } };
-function save() { localStorage.setItem('map_v23_4', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
+function save() { localStorage.setItem('map_v23_5', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
 function load() {
-    const s = localStorage.getItem('map_v23_4') || localStorage.getItem('map_v23_3') || localStorage.getItem('map_v23_2') || localStorage.getItem('map_v23_1') || localStorage.getItem('map_v23') || localStorage.getItem('map_v22'); if(!s) return;
+    const s = localStorage.getItem('map_v23_5') || localStorage.getItem('map_v23_4') || localStorage.getItem('map_v23_3') || localStorage.getItem('map_v23_2') || localStorage.getItem('map_v23_1') || localStorage.getItem('map_v23') || localStorage.getItem('map_v22'); if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
     d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets[i]={img, src:ad.src, off:ad.off}; addThumb(i); render(); }; img.src = ad.src; });
 }
