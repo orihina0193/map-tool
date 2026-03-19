@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.9.6</title>
+    <title>避難所レイアウト v22.9.7</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -11,7 +11,7 @@
         #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; }
         #item-list { display: flex; gap: 8px; align-items: center; }
         .thumb { width: 50px; height: 50px; border-radius: 6px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; }
-        .thumb.selected { border-color: #007aff; border-width: 3px; box-shadow: 0 0 10px rgba(0,122,255,0.3); }
+        .thumb.selected { border-color: #007aff; border-width: 3px; }
         .deselect-btn { width: 50px; height: 50px; border-radius: 6px; border: 1px solid #ccc; background: #eee; color: #666; font-size: 10px; font-weight: bold; flex-shrink: 0; }
         #upload-label { width: 50px; height: 50px; border: 2px dashed #bbb; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 20px; color: #999; flex-shrink: 0; background: #fff; }
         #bot-panel { position: absolute; bottom: 0; width: 100%; height: var(--bot-h); background: rgba(255,255,255,0.98); border-top: 1px solid #ccc; padding: 12px; box-sizing: border-box; z-index: 100; display: flex; flex-direction: column; gap: 12px; }
@@ -20,28 +20,26 @@
         input[type="range"] { flex: 1; height: 32px; }
         .prec-btn { width: 38px; height: 35px; font-size: 18px; border: 1px solid #ccc; background: #fff; border-radius: 6px; }
         .tool-section { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-        #nudge-grid { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(2, 40px); gap: 4px; }
-        #nudge-grid button { font-size: 20px; border: 1px solid #ccc; background: #fff; border-radius: 8px; }
+        #nudge-grid { display: grid; grid-template-columns: repeat(3, 40px); gap: 4px; }
+        #nudge-grid button { height: 40px; font-size: 20px; border: 1px solid #ccc; background: #fff; border-radius: 8px; }
         .mode-box { flex: 1; display: flex; flex-direction: column; gap: 8px; }
         .mode-row { display: flex; gap: 4px; }
         .mode-row button { flex: 1; height: 40px; font-size: 11px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
-        .mode-row button.active { background: #ff3b30; color: #fff; border-color: #c41e16; }
-        #m-move.active { background: #007aff; border-color: #004da3; }
+        .mode-row button.active { background: #007aff; color: #fff; border-color: #004da3; }
         .clear-btn { height: 32px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; font-weight: bold; }
-        .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; margin-bottom: 4px; }
+        .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
         #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; z-index: 50; }
-        /* 保存用プレビュー */
         #save-overlap { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:200; display:none; flex-direction:column; align-items:center; justify-content:center; color:white; }
-        #save-overlap img { max-width:90%; max-height:70%; border:2px solid white; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        #save-overlap img { max-width:90%; max-height:70%; border:2px solid white; }
     </style>
 </head>
 <body>
 <canvas id="cvs"></canvas>
 <div id="zoom-tag">Zoom: 100%</div>
 <div id="save-overlap" onclick="this.style.display='none'">
-    <p style="font-size:14px; margin-bottom:10px;">画像を長押しして「"写真"に追加」</p>
+    <p style="font-size:14px; margin-bottom:10px;">画像を長押しして保存</p>
     <img id="out-img">
-    <p style="margin-top:15px; font-size:12px; opacity:0.7;">タップで閉じる</p>
+    <p style="margin-top:15px; font-size:12px; opacity:0.7;">タップして戻る</p>
 </div>
 <div id="top-panel"><div id="item-list"><button class="deselect-btn" onclick="deselect()">選択<br>解除</button><label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple></label></div></div>
 <div id="bot-panel">
@@ -62,8 +60,7 @@ const sizeS = document.getElementById('size-s'); const offS = document.getElemen
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], edgeLines = [], selIdx = -1, activeAsset = -1, mode = 'move';
-let drag = false, pinch = false, lastDist = 0, lastMid = {x:0, y:0}, lastT = {x:0, y:0};
-let touchStartTime = 0, hasMoved = false, isClickReady = false;
+let drag = false, pinch = false, lastDist = 0, lastMid = {x:0, y:0}, lastT = {x:0, y:0}, touchStartTime = 0;
 
 function init() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; load(); setMode('move'); render(); }
 const toS = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
@@ -83,7 +80,7 @@ function render(isExport = false) {
         }
     }
     let drawList = [];
-    map.forEach((d, i) => drawList.push({ type: 'img', data: d, sort: d.x + d.s + d.y + d.s, originalIdx: i }));
+    map.forEach((d, i) => drawList.push({ type: 'img', data: d, sort: d.x + d.y, originalIdx: i }));
     edgeLines.forEach((l, i) => drawList.push({ type: 'line', data: l, sort: Math.max(l.x1, l.x2) + Math.max(l.y1, l.y2), originalIdx: i }));
     drawList.sort((a, b) => a.sort - b.sort);
     drawList.forEach(obj => {
@@ -107,16 +104,14 @@ function render(isExport = false) {
 
 function exportImage() {
     deselect(); render(true); 
-    const dataUrl = cvs.toDataURL('image/png');
-    document.getElementById('out-img').src = dataUrl;
-    document.getElementById('save-overlap').style.display = 'flex';
-    render();
+    document.getElementById('out-img').src = cvs.toDataURL('image/png');
+    document.getElementById('save-overlap').style.display = 'flex'; render();
 }
 
 cvs.addEventListener('touchstart', e => {
-    touchStartTime = Date.now(); hasMoved = false; isClickReady = true;
+    touchStartTime = Date.now();
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
-    if(e.touches.length >= 2) { pinch = true; drag = false; isClickReady = false;
+    if(e.touches.length >= 2) { pinch = true; drag = false;
         lastDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
         lastMid = {x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
         return;
@@ -126,18 +121,15 @@ cvs.addEventListener('touchstart', e => {
 
 cvs.addEventListener('touchmove', e => {
     e.preventDefault(); const t = e.touches[0];
-    const moveDist = Math.hypot(t.clientX - lastT.x, t.clientY - lastT.y);
-    if(moveDist > 5) { hasMoved = true; isClickReady = false; }
     if(pinch && e.touches.length >= 2) {
         let d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
         let m = {x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
         let f = d / lastDist; cam.x = m.x - (m.x - cam.x)*f + (m.x - lastMid.x); cam.y = m.y - (m.y - cam.y)*f + (m.y - lastMid.y);
         cam.z *= f; lastDist = d; lastMid = m; document.getElementById('zoom-tag').innerText = "Zoom: "+Math.round(cam.z*100)+"%";
     } else if(drag) {
-        const g = toG(t.clientX, t.clientY);
         if(mode === 'move' && activeAsset === -1) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
         else if(mode === 'pen') {
-            const pg = toG(lastT.x, lastT.y);
+            const g = toG(t.clientX, t.clientY); const pg = toG(lastT.x, lastT.y);
             addEdgeLine(Math.round(pg.x), Math.round(pg.y), Math.round(g.x), Math.round(g.y));
         }
     }
@@ -145,14 +137,12 @@ cvs.addEventListener('touchmove', e => {
 }, {passive: false});
 
 cvs.addEventListener('touchend', e => {
-    if(!pinch && isClickReady && !hasMoved && (Date.now() - touchStartTime < 300)) {
+    if(!pinch && (Date.now() - touchStartTime < 300)) {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
-            if(activeAsset !== -1) {
-                map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
-                selIdx = map.length - 1; 
-            } else {
-                let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
+            if(activeAsset !== -1) { map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)}); selIdx = map.length-1; }
+            else {
+                let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1.2 && Math.abs(g.y - (d.y+0.5)) < 1.2);
                 if(h !== -1) { selIdx = h; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; }
                 else { selIdx = -1; }
             }
@@ -169,9 +159,9 @@ function addEdgeLine(x1, y1, x2, y2) {
     const key = [x1,y1,x2,y2].sort((a,b)=>a-b).join(',');
     if(!edgeLines.some(l => [l.x1,l.y1,l.x2,l.y2].sort((a,b)=>a-b).join(',') === key)) edgeLines.push({x1, y1, x2, y2});
 }
-window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected')); render(); };
+window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
 function setMode(m) {
-    mode = m; selIdx = -1; if(m !== 'move') activeAsset = -1;
+    mode = m; selIdx = -1; if(m!=='move') activeAsset = -1;
     ['m-move','m-pen','m-erase'].forEach(id => document.getElementById(id).className = id===`m-${m}`?'active':'');
     render();
 }
@@ -184,7 +174,7 @@ document.getElementById('img-in').onchange = (e) => {
         const r = new FileReader(); r.onload = (ev) => {
             const i = new Image(); i.onload = () => {
                 const src = crop(i); const i2 = new Image();
-                i2.onload = () => { assets.push({img: i2, src: src, off: 0}); addThumb(assets.length - 1); save(); }; i2.src = src;
+                i2.onload = () => { assets.push({img:i2, src, off:0}); addThumb(assets.length-1); save(); }; i2.src = src;
             }; i.src = ev.target.result;
         }; r.readAsDataURL(f);
     }
@@ -200,18 +190,18 @@ function crop(img) {
 }
 function addThumb(idx) {
     const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`;
-    d.onclick = () => { setMode('move'); document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected')); d.classList.add('selected'); activeAsset = idx; render(); };
+    d.onclick = () => { setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); activeAsset=idx; render(); };
     document.getElementById('item-list').appendChild(d);
 }
-function save() { localStorage.setItem('map_v28', JSON.stringify({m: map, el: edgeLines, a: assets.map(a=>({src:a.src, off:a.off}))})); }
+function save() { localStorage.setItem('map_v28', JSON.stringify({m:map, el:edgeLines, a:assets.map(a=>({src:a.src, off:a.off}))})); }
 function load() {
     const s = localStorage.getItem('map_v28'); if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
     d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets[i]={img, src:ad.src, off:ad.off}; addThumb(i); render(); }; img.src = ad.src; });
 }
 window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; render(); save(); } };
-window.adjS = (v) => { if(selIdx!==-1){ let n = parseFloat(sizeS.value)+v; n=Math.max(0.1,n); sizeS.value=n; map[selIdx].s=n; render(); save(); } };
-window.adjO = (v) => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ assets[idx].off+=v; offS.value=assets[idx].off; render(); save(); } };
+window.adjS = (v) => { if(selIdx!==-1){ let n=parseFloat(sizeS.value)+v; n=Math.max(0.1,n); sizeS.value=n; map[selIdx].s=n; render(); save(); } };
+window.adjO = (v) => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1 && assets[idx]){ assets[idx].off+=v; offS.value=assets[idx].off; render(); save(); } };
 window.clearAll = () => { if(confirm("消去しますか？")){ localStorage.clear(); location.reload(); } };
 init();
 </script>
