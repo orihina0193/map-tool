@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v8 - 自動余白カット版</title>
+    <title>避難所レイアウト v9 - 接地微調整版</title>
     <style>
-        :root { --top-h: 80px; --bot-h: 150px; }
+        :root { --top-h: 80px; --bot-h: 180px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; }
         canvas { display: block; }
         #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; }
@@ -16,8 +16,8 @@
         #upload-label { width: 55px; height: 55px; border: 2px dashed #bbb; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 24px; color: #999; flex-shrink: 0; }
         #nudge-grid { display: grid; grid-template-columns: repeat(3, 30px); grid-template-rows: repeat(2, 35px); gap: 2px; align-self: center; }
         #nudge-grid button { padding: 0; font-size: 18px; border: 1px solid #ccc; background: #fff; border-radius: 4px; }
-        #center-ctrl { display: flex; flex-direction: column; justify-content: space-around; padding: 0 10px; }
-        .row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+        #center-ctrl { display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 0 10px; }
+        .row { display: flex; align-items: center; gap: 8px; font-size: 12px; white-space: nowrap; }
         input[type="range"] { flex: 1; }
         #side-btns { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
         #side-btns button { padding: 6px 0; font-size: 11px; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
@@ -46,8 +46,12 @@
             <span>サイズ:</span>
             <input type="range" id="size-slider" min="0.1" max="10" step="0.1" value="1">
         </div>
-        <div class="row" style="justify-content: center; gap: 20px;">
-            <button id="clear-btn" style="font-size: 10px; padding: 5px;">全リセット</button>
+        <div class="row">
+            <span>接地位置:</span>
+            <input type="range" id="offset-slider" min="-100" max="100" step="1" value="0">
+        </div>
+        <div class="row" style="justify-content: center;">
+            <button id="clear-btn" style="font-size: 10px; padding: 4px 10px;">全リセット</button>
         </div>
     </div>
     <div id="side-btns">
@@ -63,6 +67,7 @@ const ctx = cvs.getContext('2d');
 const imgIn = document.getElementById('img-in');
 const itemList = document.getElementById('item-list');
 const sizeSlider = document.getElementById('size-slider');
+const offsetSlider = document.getElementById('offset-slider');
 const zoomInfo = document.getElementById('zoom-info');
 
 const T_W = 64, T_H = 32;
@@ -73,24 +78,18 @@ let lines = [];
 let selectedIdx = -1;
 let activeAssetIdx = -1;
 let mode = 'move';
-let isDragging = false;
-let isPinching = false;
-let lastPinchDist = 0;
-let lastPinchMid = {x: 0, y: 0};
-let penStart = null;
-let currentMousePos = {x:0, y:0};
+let isDragging = false, isPinching = false;
+let lastPinchDist = 0, lastPinchMid = {x: 0, y: 0};
+let penStart = null, currentMousePos = {x:0, y:0};
 
 function init() {
-    cvs.width = window.innerWidth;
-    cvs.height = window.innerHeight;
-    loadData();
-    render();
+    cvs.width = window.innerWidth; cvs.height = window.innerHeight;
+    loadData(); render();
 }
 
 const toScreen = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
 const toGrid = (sx, sy) => {
-    let x = (sx - camera.x) / camera.zoom;
-    let y = (sy - camera.y) / camera.zoom;
+    let x = (sx - camera.x) / camera.zoom, y = (sy - camera.y) / camera.zoom;
     let gy = (y / (T_H/2) - x / (T_W/2)) / 2;
     let gx = (x / (T_W/2) + gy);
     return { x: gx, y: gy };
@@ -116,14 +115,6 @@ function render() {
         ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
     });
 
-    if(mode === 'pen' && penStart) {
-        ctx.strokeStyle = "rgba(255, 68, 68, 0.5)";
-        let g = toGrid(currentMousePos.x, currentMousePos.y);
-        let p1 = toScreen(penStart.x, penStart.y);
-        let p2 = toScreen(Math.round(g.x), Math.round(g.y));
-        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-    }
-
     mapData.forEach((d, idx) => {
         const asset = assets[d.assetIdx];
         if(!asset) return;
@@ -131,9 +122,9 @@ function render() {
         let drawW = T_W * d.size;
         let drawH = (asset.img.height / asset.img.width) * drawW;
         
-        // 建物がグリッドの足元にピタッと重なるように描画
-        // 余白をカット済みなので、画像の底辺をそのまま合わせるだけでOK
-        ctx.drawImage(asset.img, pos.x - drawW/2, pos.y - drawH + (T_H/2)*d.size, drawW, drawH);
+        // 接地位置の微調整 (d.offset を適用)
+        let groundAdjustment = (T_H/2) * d.size + (d.offset || 0);
+        ctx.drawImage(asset.img, pos.x - drawW/2, pos.y - drawH + groundAdjustment, drawW, drawH);
 
         if(selectedIdx === idx) {
             ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
@@ -144,144 +135,111 @@ function render() {
     ctx.restore();
 }
 
-// 【新機能】アップロードされた画像の透明部分を自動で切り抜く
 async function cropImage(originalImg) {
-    const tempCvs = document.createElement('canvas');
-    const tempCtx = tempCvs.getContext('2d');
-    tempCvs.width = originalImg.width;
-    tempCvs.height = originalImg.height;
+    const tempCvs = document.createElement('canvas'); const tempCtx = tempCvs.getContext('2d');
+    tempCvs.width = originalImg.width; tempCvs.height = originalImg.height;
     tempCtx.drawImage(originalImg, 0, 0);
-    
     const imageData = tempCtx.getImageData(0, 0, tempCvs.width, tempCvs.height);
     const data = imageData.data;
     let minX = tempCvs.width, minY = tempCvs.height, maxX = 0, maxY = 0;
-    
-    // 透明じゃないピクセルを探す
     for (let y = 0; y < tempCvs.height; y++) {
         for (let x = 0; x < tempCvs.width; x++) {
-            if (data[(y * tempCvs.width + x) * 4 + 3] > 10) { // アルファ値が10以上を実体とみなす
+            if (data[(y * tempCvs.width + x) * 4 + 3] > 10) {
                 if (x < minX) minX = x; if (x > maxX) maxX = x;
                 if (y < minY) minY = y; if (y > maxY) maxY = y;
             }
         }
     }
-    
-    if (maxX < minX) return originalImg; // 切り抜き失敗時はそのまま
-
-    const cropW = maxX - minX + 1;
-    const cropH = maxY - minY + 1;
-    const croppedCvs = document.createElement('canvas');
-    croppedCvs.width = cropW;
-    croppedCvs.height = cropH;
+    if (maxX < minX) return originalImg;
+    const cropW = maxX - minX + 1, cropH = maxY - minY + 1;
+    const croppedCvs = document.createElement('canvas'); croppedCvs.width = cropW; croppedCvs.height = cropH;
     croppedCvs.getContext('2d').drawImage(originalImg, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
-    
-    return new Promise(resolve => {
-        const resultImg = new Image();
-        resultImg.onload = () => resolve(resultImg);
-        resultImg.src = croppedCvs.toDataURL();
-    });
+    return new Promise(resolve => { const resultImg = new Image(); resultImg.onload = () => resolve(resultImg); resultImg.src = croppedCvs.toDataURL(); });
 }
 
 imgIn.onchange = async (e) => {
     for(let file of e.target.files) {
         const reader = new FileReader();
         reader.onload = (ev) => {
-            const img = new Image();
-            img.src = ev.target.result;
+            const img = new Image(); img.src = ev.target.result;
             img.onload = async () => {
-                // ここで自動切り抜きを実行！
                 const cropped = await cropImage(img);
-                assets.push({img: cropped, src: cropped.src});
-                addThumb(assets.length - 1);
-                saveData();
+                assets.push({img: cropped, src: cropped.src}); addThumb(assets.length - 1); saveData();
             };
         };
         reader.readAsDataURL(file);
     }
 };
 
-let lastT = {x:0, y:0};
 cvs.addEventListener('touchstart', e => {
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
     if(e.touches.length >= 2) {
-        isPinching = true; isDragging = false;
-        lastPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        isPinching = true; lastPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         lastPinchMid = {x: (e.touches[0].clientX + e.touches[1].clientX)/2, y: (e.touches[0].clientY + e.touches[1].clientY)/2};
         return;
     }
-    isDragging = true; currentMousePos = {x: t.clientX, y: t.clientY};
-    if(t.clientY < 80 || t.clientY > window.innerHeight - 150) return;
+    isDragging = true;
+    if(t.clientY < 80 || t.clientY > window.innerHeight - 180) return;
     const g = toGrid(t.clientX, t.clientY);
-    if(mode === 'erase') {
+    if(mode === 'move') {
+        let hitIdx = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
+        if(hitIdx !== -1) { 
+            selectedIdx = hitIdx; 
+            sizeSlider.value = mapData[hitIdx].size;
+            offsetSlider.value = mapData[hitIdx].offset || 0; // スライダー値を更新
+        } else if(activeAssetIdx !== -1) {
+            mapData.push({x: Math.floor(g.x), y: Math.floor(g.y), assetIdx: activeAssetIdx, size: 1, offset: 0});
+            selectedIdx = mapData.length - 1;
+            offsetSlider.value = 0;
+        }
+    } else if(mode === 'erase') {
         let hitIdx = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
         if(hitIdx !== -1) { mapData.splice(hitIdx, 1); selectedIdx = -1; }
-        lines = lines.filter(l => distToSegment({x: g.x, y: g.y}, {x: l.x1, y: l.y1}, {x: l.x2, y: l.y2}) > 0.3);
-    } else if(mode === 'pen') { penStart = {x: Math.round(g.x), y: Math.round(g.y)};
-    } else if(mode === 'move') {
-        let hitIdx = mapData.findIndex(d => g.x >= d.x && g.x < d.x+d.size && g.y >= d.y && g.y < d.y+d.size);
-        if(hitIdx !== -1) { selectedIdx = hitIdx; sizeSlider.value = mapData[hitIdx].size; }
-        else if(activeAssetIdx !== -1 && !isPinching) {
-            mapData.push({x: Math.floor(g.x), y: Math.floor(g.y), assetIdx: activeAssetIdx, size: 1});
-            selectedIdx = mapData.length - 1;
-        }
     }
     render();
 });
 
 cvs.addEventListener('touchmove', e => {
     e.preventDefault();
-    if(e.touches.length >= 2 && isPinching) {
-        const t1 = e.touches[0], t2 = e.touches[1];
-        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-        const mid = {x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2};
+    if(isPinching && e.touches.length >= 2) {
+        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const mid = {x: (e.touches[0].clientX + e.touches[1].clientX)/2, y: (e.touches[0].clientY + e.touches[1].clientY)/2};
         const zoomFactor = dist / lastPinchDist;
-        camera.x = mid.x - (mid.x - camera.x) * zoomFactor;
-        camera.y = mid.y - (mid.y - camera.y) * zoomFactor;
+        camera.x = mid.x - (mid.x - camera.x) * zoomFactor + (mid.x - lastPinchMid.x);
+        camera.y = mid.y - (mid.y - camera.y) * zoomFactor + (mid.y - lastPinchMid.y);
         camera.zoom *= zoomFactor;
-        camera.x += (mid.x - lastPinchMid.x);
-        camera.y += (mid.y - lastPinchMid.y);
         lastPinchDist = dist; lastPinchMid = mid;
         zoomInfo.innerText = "Zoom: " + Math.round(camera.zoom * 100) + "%";
-    } else if(isDragging && !isPinching) {
+    } else if(isDragging) {
         const t = e.touches[0];
-        if(mode === 'move' && selectedIdx === -1) { camera.x += (t.clientX - lastT.x); camera.y += (t.clientY - lastT.y); }
-        else if (mode === 'erase') { const g = toGrid(t.clientX, t.clientY); lines = lines.filter(l => distToSegment({x: g.x, y: g.y}, {x: l.x1, y: l.y1}, {x: l.x2, y: l.y2}) > 0.3); }
-        lastT = {x: t.clientX, y: t.clientY}; currentMousePos = {x: t.clientX, y: t.clientY};
+        if(selectedIdx === -1) { camera.x += (t.clientX - lastT.x); camera.y += (t.clientY - lastT.y); }
+        lastT = {x: t.clientX, y: t.clientY};
     }
     render();
 });
 
-cvs.addEventListener('touchend', e => {
-    if(mode === 'pen' && penStart && !isPinching) {
-        const g = toGrid(currentMousePos.x, currentMousePos.y);
-        if(penStart.x !== Math.round(g.x) || penStart.y !== Math.round(g.y)) { lines.push({x1: penStart.x, y1: penStart.y, x2: Math.round(g.x), y2: Math.round(g.y)}); }
-        penStart = null;
-    }
-    if(e.touches.length < 2) { isPinching = false; isDragging = false; }
-    saveData(); render();
-});
+cvs.addEventListener('touchend', () => { isPinching = false; isDragging = false; saveData(); });
 
-function distToSegment(p, v, w) {
-    let l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
-    if (l2 == 0) return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
-    let t = Math.max(0, Math.min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2));
-    return Math.sqrt(Math.pow(p.x - (v.x + t * (w.x - v.x)), 2) + Math.pow(p.y - (v.y + t * (w.y - v.y)), 2));
-}
 function nudge(dx, dy) { if(selectedIdx !== -1) { mapData[selectedIdx].x += dx; mapData[selectedIdx].y += dy; render(); saveData(); } }
 sizeSlider.oninput = () => { if(selectedIdx !== -1) { mapData[selectedIdx].size = parseFloat(sizeSlider.value); render(); } };
+// 【追加】接地位置調整スライダーの処理
+offsetSlider.oninput = () => { if(selectedIdx !== -1) { mapData[selectedIdx].offset = parseFloat(offsetSlider.value); render(); } };
+
 const btns = ['mode-move', 'mode-pen', 'mode-erase'];
 btns.forEach(id => { document.getElementById(id).onclick = () => { mode = id.replace('mode-', ''); btns.forEach(b => document.getElementById(b).classList.toggle('active', b === id)); if(mode !== 'move') selectedIdx = -1; render(); }; });
+
 function addThumb(idx) {
     const div = document.createElement('div'); div.className = 'thumb'; div.style.backgroundImage = `url(${assets[idx].src})`;
-    div.onclick = () => { if(activeAssetIdx === idx) { div.classList.remove('selected'); activeAssetIdx = -1; } else { document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected')); div.classList.add('selected'); activeAssetIdx = idx; mode = 'move'; btns.forEach(b => document.getElementById(b).classList.toggle('active', b === 'mode-move')); } };
+    div.onclick = () => { document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected')); div.classList.add('selected'); activeAssetIdx = idx; mode = 'move'; };
     itemList.appendChild(div);
 }
-function saveData() { localStorage.setItem('map_v8', JSON.stringify({map: mapData, lines: lines, imgs: assets.map(a => a.src)})); }
+
+function saveData() { localStorage.setItem('map_v9', JSON.stringify({map: mapData, lines: lines, imgs: assets.map(a => a.src)})); }
 function loadData() {
-    const saved = localStorage.getItem('map_v8'); if(!saved) return; const d = JSON.parse(saved); mapData = d.map || []; lines = d.lines || [];
+    const saved = localStorage.getItem('map_v9'); if(!saved) return; const d = JSON.parse(saved); mapData = d.map || []; lines = d.lines || [];
     d.imgs.forEach((src, i) => { const img = new Image(); img.src = src; img.onload = () => { assets[i] = {img, src}; addThumb(i); render(); }; });
 }
-document.getElementById('clear-btn').onclick = () => { if(confirm("消去？")){ localStorage.clear(); location.reload(); }};
+document.getElementById('clear-btn').onclick = () => { if(confirm("全消去しますか？")){ localStorage.clear(); location.reload(); }};
 init();
 </script>
 </body>
