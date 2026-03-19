@@ -3,88 +3,113 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト・プロト</title>
+    <title>避難所レイアウト・プロト v3</title>
     <style>
-        :root { --panel-h: 180px; }
+        :root { --top-h: 80px; --bot-h: 150px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; }
         canvas { display: block; }
         
-        #ui-panel {
-            position: absolute; bottom: 0; width: 100%; height: var(--panel-h);
-            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
-            border-top: 1px solid #ccc; display: flex; flex-direction: column; z-index: 100;
+        /* 上部：アイテム選択エリア */
+        #top-panel {
+            position: absolute; top: 0; width: 100%; height: var(--top-h);
+            background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc;
+            display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100;
         }
-        #item-list { display: flex; overflow-x: auto; padding: 10px; gap: 10px; border-bottom: 1px solid #eee; }
+        #item-list { display: flex; overflow-x: auto; gap: 10px; flex: 1; height: 100%; align-items: center; }
+        
+        /* 下部：操作エリア */
+        #bot-panel {
+            position: absolute; bottom: 0; width: 100%; height: var(--bot-h);
+            background: rgba(255,255,255,0.95); border-top: 1px solid #ccc;
+            display: grid; grid-template-columns: 100px 1fr 100px; padding: 10px; box-sizing: border-box; z-index: 100;
+        }
+
         .thumb {
-            width: 60px; height: 60px; border-radius: 8px; border: 2px solid transparent;
+            width: 55px; height: 55px; border-radius: 8px; border: 2px solid #ccc;
             background-size: contain; background-repeat: no-repeat; background-position: center;
             background-color: #fff; flex-shrink: 0;
         }
-        .thumb.selected { border-color: #007aff; }
+        .thumb.selected { border-color: #007aff; box-shadow: 0 0 5px rgba(0,122,255,0.5); }
 
-        #edit-tools { padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .tool-group { display: flex; align-items: center; gap: 5px; font-size: 12px; }
-        button { padding: 5px 10px; border-radius: 5px; border: 1px solid #ccc; background: #fff; }
-        button.active { background: #007aff; color: #fff; border-color: #004da3; }
+        #upload-label {
+            width: 55px; height: 55px; border: 2px dashed #bbb; border-radius: 8px;
+            display: flex; justify-content: center; align-items: center; font-size: 24px; color: #999; flex-shrink: 0;
+        }
+
+        /* 十字キー */
+        #nudge-grid { display: grid; grid-template-columns: repeat(3, 30px); grid-template-rows: repeat(2, 35px); gap: 2px; align-self: center; }
+        #nudge-grid button { padding: 0; font-size: 18px; border: 1px solid #ccc; background: #fff; border-radius: 4px; }
+
+        /* 中央コントロール */
+        #center-ctrl { display: flex; flex-direction: column; justify-content: space-around; padding: 0 10px; }
+        .row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+        input[type="range"] { flex: 1; }
+
+        /* 右側ボタン */
+        #side-btns { display: flex; flex-direction: column; gap: 5px; justify-content: center; }
+        #side-btns button { padding: 8px 0; font-size: 12px; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
+        #side-btns button.active { background: #007aff; color: #fff; }
         
-        #nudge-grid { display: grid; grid-template-columns: repeat(3, 1fr); width: 90px; }
-        #upload-btn { width: 60px; height: 60px; border: 2px dashed #bbb; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 24px; color: #999; }
+        #zoom-info { position: absolute; top: calc(var(--top-h) + 10px); right: 10px; background: rgba(0,0,0,0.5); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 12px; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <canvas id="cvs"></canvas>
+<div id="zoom-info">Zoom: 100%</div>
 
-<div id="ui-panel">
+<div id="top-panel">
     <div id="item-list">
-        <label id="upload-btn">＋<input type="file" id="img-in" hidden accept="image/*" multiple></label>
+        <label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple></label>
     </div>
-    
-    <div id="edit-tools">
-        <div class="tool-group">
-            <button id="mode-move" class="active">移動</button>
-            <button id="mode-pen">ペン</button>
-            <button id="del-btn">削除</button>
+</div>
+
+<div id="bot-panel">
+    <div id="nudge-grid">
+        <span></span><button onclick="nudge(0,-0.1)">↑</button><span></span>
+        <button onclick="nudge(-0.1,0)">←</button><button onclick="nudge(0,0.1)">↓</button><button onclick="nudge(0.1,0)">→</button>
+    </div>
+
+    <div id="center-ctrl">
+        <div class="row">
+            <span>サイズ:</span>
+            <input type="range" id="size-slider" min="0.1" max="10" step="0.1" value="1">
+        </div>
+        <div class="row" style="justify-content: center; gap: 20px;">
+            <button id="del-btn" style="color:red;">選択削除</button>
             <button id="clear-btn">全消去</button>
         </div>
-        <div class="tool-group">
-            <span>サイズ:</span>
-            <input type="range" id="size-slider" min="0.5" max="8" step="0.1" value="1">
-        </div>
-        <div id="nudge-grid">
-            <span></span><button onclick="nudge(0,-0.1)">↑</button><span></span>
-            <button onclick="nudge(-0.1,0)">←</button><span></span><button onclick="nudge(0.1,0)">→</button>
-            <span></span><button onclick="nudge(0,0.1)">↓</button><span></span>
-        </div>
-        <div class="tool-group">
-            <span>ズーム: <span id="zoom-val">100%</span></span>
-        </div>
+    </div>
+
+    <div id="side-btns">
+        <button id="mode-move" class="active">移動</button>
+        <button id="mode-pen">ペン</button>
     </div>
 </div>
 
 <script>
+// --- 前回のスクリプトをベースにUIのIDだけ調整 ---
 const cvs = document.getElementById('cvs');
 const ctx = cvs.getContext('2d');
 const imgIn = document.getElementById('img-in');
 const itemList = document.getElementById('item-list');
 const sizeSlider = document.getElementById('size-slider');
-const zoomDisp = document.getElementById('zoom-val');
+const zoomInfo = document.getElementById('zoom-info');
 
-// 設定
 const T_W = 64, T_H = 32;
 let camera = { x: window.innerWidth/2, y: window.innerHeight/3, zoom: 1 };
 let assets = [];
-let mapData = []; // {x, y, assetIdx, size}
-let lines = [];   // [{x1, y1, x2, y2}]
+let mapData = []; 
+let lines = [];   
 let selectedIdx = -1;
-let mode = 'move'; // 'move' or 'pen'
+let mode = 'move';
 let isDragging = false;
 let lastPinchDist = 0;
 let penStart = null;
 
 function init() {
     cvs.width = window.innerWidth;
-    cvs.height = window.innerHeight - 180;
+    cvs.height = window.innerHeight; // 全画面描画
     loadData();
     render();
 }
@@ -104,7 +129,6 @@ function render() {
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
-    // グリッド背景
     ctx.strokeStyle = "rgba(0,0,0,0.05)";
     for(let i=-20; i<=40; i++) {
         let s = toScreen(i, -20), e = toScreen(i, 40);
@@ -113,21 +137,18 @@ function render() {
         ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
     }
 
-    // 線引きデータ描画
     ctx.strokeStyle = "#ff4444"; ctx.lineWidth = 3;
     lines.forEach(l => {
         let p1 = toScreen(l.x1, l.y1), p2 = toScreen(l.x2, l.y2);
         ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
     });
 
-    // 建物描画
     mapData.forEach((d, idx) => {
         const asset = assets[d.assetIdx];
         if(!asset) return;
         let pos = toScreen(d.x, d.y);
         let w = T_W * d.size;
         let h = (asset.img.height / asset.img.width) * w;
-        // 地面接地調整：d.sizeに合わせつつ、描画
         ctx.drawImage(asset.img, pos.x - w/2, pos.y - h + (T_H/2)*d.size, w, h);
 
         if(selectedIdx === idx) {
@@ -140,7 +161,6 @@ function render() {
     ctx.restore();
 }
 
-// タッチイベント
 let lastT = {x:0, y:0};
 cvs.addEventListener('touchstart', e => {
     isDragging = true;
@@ -151,6 +171,9 @@ cvs.addEventListener('touchstart', e => {
         lastPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         return;
     }
+
+    // パネル領域外のみ反応
+    if(t.clientY < 80 || t.clientY > window.innerHeight - 150) return;
 
     const g = toGrid(t.clientX, t.clientY);
     if(mode === 'pen') {
@@ -169,16 +192,14 @@ cvs.addEventListener('touchstart', e => {
 });
 
 cvs.addEventListener('touchmove', e => {
-    e.preventDefault();
     const t = e.touches[0];
     if(e.touches.length === 2) {
         let dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         camera.zoom *= (dist / lastPinchDist);
         lastPinchDist = dist;
-        zoomDisp.innerText = Math.round(camera.zoom * 100) + "%";
+        zoomInfo.innerText = "Zoom: " + Math.round(camera.zoom * 100) + "%";
     } else {
-        // ペンモード以外ならカメラ移動
-        if(mode !== 'pen') {
+        if(mode !== 'pen' && isDragging) {
             camera.x += (t.clientX - lastT.x);
             camera.y += (t.clientY - lastT.y);
         }
@@ -192,7 +213,6 @@ cvs.addEventListener('touchend', e => {
         const g = toGrid(lastT.x, lastT.y);
         lines.push({x1: penStart.x, y1: penStart.y, x2: Math.round(g.x), y2: Math.round(g.y)});
         penStart = null;
-        saveData();
     }
     isDragging = false;
     render();
@@ -214,9 +234,9 @@ sizeSlider.oninput = () => {
     }
 };
 
-document.getElementById('mode-move').onclick = () => { mode = 'move'; updateBtns(); };
-document.getElementById('mode-pen').onclick = () => { mode = 'pen'; updateBtns(); };
-function updateBtns() {
+document.getElementById('mode-move').onclick = () => { mode = 'move'; updateMode(); };
+document.getElementById('mode-pen').onclick = () => { mode = 'pen'; updateMode(); };
+function updateMode() {
     document.getElementById('mode-move').classList.toggle('active', mode==='move');
     document.getElementById('mode-pen').classList.toggle('active', mode==='pen');
 }
@@ -229,15 +249,7 @@ imgIn.onchange = (e) => {
             img.src = ev.target.result;
             img.onload = () => {
                 assets.push({img, src: img.src});
-                const idx = assets.length - 1;
-                const div = document.createElement('div');
-                div.className = 'thumb'; div.style.backgroundImage = `url(${img.src})`;
-                div.onclick = () => {
-                    document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected'));
-                    div.classList.add('selected');
-                    window.activeAssetIdx = idx;
-                };
-                itemList.appendChild(div);
+                addThumb(assets.length - 1);
                 saveData();
             };
         };
@@ -245,11 +257,22 @@ imgIn.onchange = (e) => {
     }
 };
 
+function addThumb(idx) {
+    const div = document.createElement('div');
+    div.className = 'thumb'; div.style.backgroundImage = `url(${assets[idx].src})`;
+    div.onclick = () => {
+        document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected'));
+        div.classList.add('selected');
+        window.activeAssetIdx = idx;
+    };
+    itemList.appendChild(div);
+}
+
 function saveData() {
-    localStorage.setItem('map_v2', JSON.stringify({map: mapData, lines: lines, imgs: assets.map(a => a.src)}));
+    localStorage.setItem('map_v3', JSON.stringify({map: mapData, lines: lines, imgs: assets.map(a => a.src)}));
 }
 function loadData() {
-    const saved = localStorage.getItem('map_v2');
+    const saved = localStorage.getItem('map_v3');
     if(!saved) return;
     const d = JSON.parse(saved);
     mapData = d.map || []; lines = d.lines || [];
@@ -257,10 +280,7 @@ function loadData() {
         const img = new Image(); img.src = src;
         img.onload = () => {
             assets[i] = {img, src};
-            const div = document.createElement('div');
-            div.className = 'thumb'; div.style.backgroundImage = `url(${src})`;
-            div.onclick = () => { window.activeAssetIdx = i; };
-            itemList.appendChild(div);
+            addThumb(i);
             render();
         };
     });
