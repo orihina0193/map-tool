@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.5</title>
+    <title>避難所レイアウト v22.6</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -69,27 +69,33 @@ const toG = (sx, sy) => {
 function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
+    
+    // グリッド描画
     ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
     for(let i=-20; i<=40; i++){
         let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
+    
+    // 赤い線
     ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
     edgeLines.forEach(l => {
         let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
     });
+
+    // オブジェクト描画
     map.forEach((d, i) => {
         const a = assets[d.aIdx]; if(!a) return;
         let w = T_W * d.s;
         let h = (a.img.height/a.img.width) * w;
 
-        // 【決定的修正】南側頂点を不動のアンカーにする
-        // toS(d.x, d.y) は常に「北」なので、サイズ d.s を足した地点を基準点にする
-        let anchorX = (d.x - d.y) * (T_W/2); // 水平中央
-        let anchorY = (d.x + d.y + 2 * d.s) * (T_H/2); // これが南側の角（接地ポイント）
-
-        // 画像の描画：足元（anchorX, anchorY）を基準に上に描く
-        ctx.drawImage(a.img, anchorX - w/2, anchorY - h + (a.off || 0), w, h);
+        // 【決定的修正】南側（手前）頂点をアンカーにする
+        // タイルの北端座標(d.x, d.y)にサイズ(d.s)を足した地点が、タイルの一番手前の角（南端）
+        let southPoint = toS(d.x + d.s, d.y + d.s);
+        
+        // southPoint.x, southPoint.y が「地面」の基準点
+        // 画像の下端中央をここに合わせることで、サイズを変えても足元が動かない
+        ctx.drawImage(a.img, southPoint.x - w/2, southPoint.y - h + (a.off || 0), w, h);
 
         if(selIdx === i) {
             ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
@@ -100,7 +106,7 @@ function render() {
     ctx.restore();
 }
 
-/* その他のロジックは不変 */
+/* --- イベント・ユーティリティ群 --- */
 cvs.addEventListener('touchstart', e => {
     touchStartTime = Date.now(); hasMoved = false;
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
