@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.2</title>
+    <title>避難所レイアウト v22.3</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -80,13 +80,16 @@ function render() {
     });
     map.forEach((d, i) => {
         const a = assets[d.aIdx]; if(!a) return;
-        let p = toS(d.x, d.y);
         let w = T_W * d.s;
         let h = (a.img.height/a.img.width) * w;
+        
+        // ★最重要修正：
+        // 手前の角（南側）は座標で言うと toS(d.x + d.s, d.y + d.s) です。
+        // ここを基準にして、画像の下端を合わせます。
+        let bottomCenter = toS(d.x + d.s/2, d.y + d.s/2);
+        let footY = bottomCenter.y + (T_H/2) * d.s;
 
-        // ★修正：描画位置を「ひし形の下端（南側の角）」基準に固定
-        // p.y に対して (T_H * d.s) を足すことで、建物の占有マスの最下部に画像の下端を合わせます
-        ctx.drawImage(a.img, p.x - w/2, p.y + (T_H * d.s) - h + (a.off || 0), w, h);
+        ctx.drawImage(a.img, bottomCenter.x - w/2, footY - h + (a.off || 0), w, h);
 
         if(selIdx === i) {
             ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
@@ -175,12 +178,12 @@ document.getElementById('img-in').onchange = (e) => {
 };
 function crop(img) {
     const c = document.createElement('canvas'); const t = c.getContext('2d');
-    c.width = img.width; h = img.height; t.drawImage(img,0,0);
-    const d = t.getImageData(0,0,c.width,h).data;
-    let x1=c.width, y1=h, x2=0, y2=0;
-    for(let y=0; y<h; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); }
-    const w = x2-x1+1, h2 = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h2;
-    c2.getContext('2d').drawImage(img,x1,y1,w,h2,0,0,w,h2); return c2.toDataURL();
+    c.width = img.width; c.height = img.height; t.drawImage(img,0,0);
+    const d = t.getImageData(0,0,c.width,c.height).data;
+    let x1=c.width, y1=c.height, x2=0, y2=0;
+    for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); }
+    const w = x2-x1+1, h = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h;
+    c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL();
 }
 function addThumb(idx) {
     const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`;
