@@ -132,6 +132,7 @@ cvs.addEventListener('touchmove', e => {
 
 cvs.addEventListener('touchend', e => {
     if(!pinch && drag && !hasMoved && (Date.now() - touchStartTime < 250)) {
+        // 短いタップ（かつ動いていない）時だけ設置・選択を行う
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
             let h = map.findIndex(d => g.x >= d.x && g.x < d.x+d.s && g.y >= d.y && g.y < d.y+d.s);
@@ -146,7 +147,10 @@ cvs.addEventListener('touchend', e => {
     drag = pinch = false; save(); render();
 });
 
+// 選択解除
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
+
+/* 以下、前回までの基本機能を統合 */
 function addEdgeLine(gx1, gy1, gx2, gy2) {
     const key = [gx1, gy1, gx2, gy2].sort((a,b)=>a-b).join(',');
     if(!edgeLines.some(l => [l.x1, l.y1, l.x2, l.y2].sort((a,b)=>a-b).join(',') === key)) {
