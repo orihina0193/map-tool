@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v28.0.5</title>
+    <title>避難所レイアウト v28.0.6</title>
     <style>
         :root { --top-h: 75px; --bot-h: 300px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -27,9 +27,10 @@
         .mode-row button { flex: 1; min-width: 50px; height: 36px; font-size: 10px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
         .mode-row button.active { background: #007aff; color: #fff; }
         .data-row { display: flex; gap: 4px; }
-        .data-btn { flex: 1; height: 36px; font-size: 11px; font-weight: bold; border-radius: 8px; border: none; color: white; }
+        .data-btn { flex: 1; height: 36px; font-size: 10px; font-weight: bold; border-radius: 8px; border: none; color: white; }
         .btn-out { background: #5856d6; }
         .btn-in { background: #ff9500; }
+        .btn-clr { background: #ff3b30; }
         .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
         #export-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
         #export-img { max-width: 90%; max-height: 75%; border: 2px solid #fff; border-radius: 8px; }
@@ -46,13 +47,14 @@
         <div class="mode-box">
             <button class="save-btn" onclick="exportImage()">画像として保存</button>
             <div class="data-row">
-                <button class="data-btn btn-out" onclick="exportData()">データ出力</button>
-                <button class="data-btn btn-in" onclick="importData()">データ読込</button>
+                <button class="data-btn btn-out" onclick="exportData()">出力</button>
+                <button class="data-btn btn-in" onclick="importData()">読込</button>
+                <button class="data-btn btn-clr" onclick="clearAll()">リセット</button>
             </div>
             <div class="mode-row">
                 <button id="m-move" onclick="setMode('move')">移動</button>
                 <button id="m-pen" onclick="setMode('pen')">ペン</button>
-                <button id="m-p-erase" onclick="setMode('p-erase')">ペン消し</button>
+                <button id="m-p-erase" onclick="setMode('p-erase')">線消し</button>
                 <button id="m-erase" onclick="setMode('erase')">消去</button>
             </div>
         </div>
@@ -166,23 +168,22 @@ cvs.addEventListener('touchmove', e => {
 
 cvs.addEventListener('touchend', () => { drag = pinch = false; lockedTarget = -1; render(); });
 
-// ★データ管理機能
 function exportData() {
     const data = JSON.stringify({m: map, l: lines});
-    const encoded = btoa(unescape(encodeURIComponent(data))); // 簡易的な圧縮(Base64)
-    prompt("【データ出力】このコードをコピーして保存してください", encoded);
+    const encoded = btoa(unescape(encodeURIComponent(data)));
+    prompt("【出力】コードをコピーしてください", encoded);
 }
 function importData() {
-    const code = prompt("【データ読込】保存したコードを貼り付けてください");
+    const code = prompt("【読込】コードを貼り付けてください");
     if(!code) return;
     try {
         const decoded = decodeURIComponent(escape(atob(code)));
         const d = JSON.parse(decoded);
         map = d.m || []; lines = d.l || [];
         save(); render();
-        alert("読み込み完了！");
     } catch(e) { alert("無効なコードです"); }
 }
+window.clearAll = () => { if(confirm("【リセット】全消去してよろしいですか？")){ map = []; lines = []; save(); render(); } };
 
 function setMode(m) { mode = m; document.querySelectorAll('.mode-row button').forEach(b => b.classList.remove('active')); document.getElementById(`m-${m}`).classList.add('active'); render(); }
 window.adjS = (v) => { if(selIdx!==-1){ map[selIdx].s = parseFloat((map[selIdx].s + v).toFixed(2)); save(); render(); } };
