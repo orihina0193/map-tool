@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.9.9</title>
+    <title>避難所レイアウト v28.0.3</title>
     <style>
         :root { --top-h: 75px; --bot-h: 260px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -37,7 +37,7 @@
 <canvas id="cvs"></canvas>
 <div id="top-panel"><div id="item-list"><button class="deselect-btn" onclick="deselect()">選択<br>解除</button><label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple onchange="handleFiles(this.files)"></label></div></div>
 <div id="bot-panel">
-    <div class="row"><label>サイズ</label><button class="prec-btn" onclick="adjS(-0.1)">-</button><input type="range" id="size-s" min="0.1" max="5" step="0.1"><button class="prec-btn" onclick="adjS(0.1)">+</button></div>
+    <div class="row"><label>サイズ</label><button class="prec-btn" onclick="adjS(-0.05)">-</button><input type="range" id="size-s" min="0.1" max="5" step="0.05"><button class="prec-btn" onclick="adjS(0.05)">+</button></div>
     <div class="row"><label>接地</label><button class="prec-btn" onclick="adjO(-1)">-</button><input type="range" id="off-s" min="-100" max="100" step="1"><button class="prec-btn" onclick="adjO(1)">+</button></div>
     <div class="tool-section">
         <div id="nudge-grid"><span></span><button onclick="nudge(0,-0.1)">↑</button><span></span><button onclick="nudge(-0.1,0)">←</button><button onclick="nudge(0,0.1)">↓</button><button onclick="nudge(0.1,0)">→</button></div>
@@ -56,23 +56,24 @@
 <div id="export-overlay" onclick="this.style.display='none'"><img id="export-img" src=""><p style="color:white; margin-top:10px;">長押しで保存してください</p></div>
 
 <script>
+// ★育美さんからいただいた黄金比率をデフォルトに設定
+const PRESETS = [
+    { name: "HQ", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.6, o: 1, gw: 2, gh: 2, ox: -0.1, oy: -0.2 },
+    { name: "DOOM", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.6, o: -3, gw: 2, gh: 2, ox: -0.2, oy: 0 },
+    { name: "MED", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/MED.png", s: 1.6, o: -1, gw: 2, gh: 2, ox: -0.1, oy: -0.1 },
+    { name: "SRG", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/SRG.png", s: 1.7, o: -3, gw: 2, gh: 2, ox: -0.1, oy: -0.1 },
+    { name: "RSS", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/RSS.png", s: 1.6, o: -4, gw: 2, gh: 2, ox: -0.2, oy: -0.3 },
+    { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 1.6, o: 0, gw: 2, gh: 2, ox: -0.2, oy: -0.2 },
+    { name: "OP", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/OP.png", s: 0.8, o: 0, gw: 1, gh: 1, ox: -0.1, oy: -0.1 },
+    { name: "ROCK2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 0.8, o: -5, gw: 1, gh: 1, ox: -0.1, oy: -0.1 } 
+];
+
 const cvs = document.getElementById('cvs'); const ctx = cvs.getContext('2d');
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], lines = [], selIdx = -1, activeAsset = -1, mode = 'move';
 let drag = false, pinch = false, lockedTarget = -1, penStart = null;
 let lastT = {x: 0, y: 0}, lastDist = 0;
-
-const PRESETS = [
-    { name: "HQ", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.6, o: 1, gw: 2, gh: 2 },
-    { name: "DOOM", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.6, o: -3, gw: 2, gh: 2 },
-    { name: "MED", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/MED.png", s: 1.6, o: -1, gw: 2, gh: 2 },
-    { name: "SRG", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/SRG.png", s: 1.7, o: -3, gw: 2, gh: 2 },
-    { name: "RSS", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/RSS.png", s: 1.6, o: -4, gw: 2, gh: 2 },
-    { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 1.6, o: 0, gw: 2, gh: 2 },
-    { name: "OP", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/OP.png", s: 0.8, o: 0, gw: 1, gh: 1 },
-    { name: "ROCK2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 0.8, o: -6, gw: 1, gh: 1 } 
-];
 
 function init() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; loadPresets().then(() => { load(); render(); }); }
 async function loadPresets() {
@@ -81,7 +82,7 @@ async function loadPresets() {
             const img = new Image(); img.crossOrigin = "anonymous";
             img.onload = () => {
                 const src = crop(img); const i2 = new Image();
-                i2.onload = () => { assets.push({ img: i2, src, defS: p.s, defO: p.o, gw: p.gw, gh: p.gh }); addThumb(assets.length - 1); resolve(); };
+                i2.onload = () => { assets.push({ img: i2, src, defS: p.s, defO: p.o, gw: p.gw, gh: p.gh, ox: p.ox, oy: p.oy }); addThumb(assets.length - 1); resolve(); };
                 i2.src = src;
             };
             img.onerror = () => resolve(); img.src = p.url;
@@ -94,7 +95,6 @@ const toG = (sx, sy) => {
     let x = (sx - cam.x)/cam.z, y = (sy - cam.y)/cam.z;
     let gy = (y/(T_H/2) - x/(T_W/2))/2; return { x: x/(T_W/2) + gy, y: gy };
 };
-const getNearestCross = (gx, gy) => ({ x: Math.round(gx), y: Math.round(gy) });
 
 function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height);
@@ -111,9 +111,14 @@ function render() {
     if(mode === 'pen' && penStart) { const p = toS(penStart.x, penStart.y); ctx.fillStyle = "red"; ctx.beginPath(); ctx.arc(p.x, p.y, 4/cam.z, 0, Math.PI*2); ctx.fill(); }
     map.sort((a,b)=>(a.x+a.y)-(b.x+b.y)).forEach((d, i) => {
         const a = assets[d.aIdx]; if(!a) return;
-        const w = T_W * d.s, h = (a.img.height/a.img.width) * w; const anchor = toS(d.x + a.gw, d.y + a.gh);
+        const w = T_W * d.s, h = (a.img.height/a.img.width) * w;
+        const anchor = toS(d.x + a.gw, d.y + a.gh);
         ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + d.off, w, h);
-        if(selIdx === i) { ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2/cam.z; const pS = toS(d.x+a.gw, d.y+a.gh), pW = toS(d.x, d.y+a.gh), pE = toS(d.x+a.gw, d.y), pN = toS(d.x, d.y); ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke(); }
+        if(selIdx === i) { 
+            ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2/cam.z; 
+            const pS = toS(d.x+a.gw, d.y+a.gh), pW = toS(d.x, d.y+a.gh), pE = toS(d.x+a.gw, d.y), pN = toS(d.x, d.y); 
+            ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke(); 
+        }
     });
     ctx.restore();
 }
@@ -121,14 +126,25 @@ function render() {
 cvs.addEventListener('touchstart', e => {
     if(e.touches.length >= 2) { pinch = true; drag = false; lockedTarget = -1; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); return; }
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
-    const rawG = toG(t.clientX, t.clientY); const crossG = getNearestCross(rawG.x, rawG.y);
+    const rawG = toG(t.clientX, t.clientY);
+    const crossG = { x: Math.round(rawG.x), y: Math.round(rawG.y) };
     if(mode === 'pen') { if(!penStart) { penStart = crossG; } else { if(penStart.x !== crossG.x || penStart.y !== crossG.y) { lines.push({x1: penStart.x, y1: penStart.y, x2: crossG.x, y2: crossG.y}); save(); } penStart = null; } }
     else if(mode === 'p-erase') { lines = lines.filter(l => { const mx = (l.x1 + l.x2) / 2, my = (l.y1 + l.y2) / 2; return Math.hypot(mx - rawG.x, my - rawG.y) > 0.4; }); save(); }
     else if(mode === 'move' || mode === 'erase') {
-        const gridPos = {x: Math.round(rawG.x), y: Math.round(rawG.y)};
-        const hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return gridPos.x >= d.x && gridPos.x < d.x+a.gw && gridPos.y >= d.y && gridPos.y < d.y+a.gh; });
+        const hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return rawG.x >= d.x && rawG.x < d.x+a.gw && rawG.y >= d.y && rawG.y < d.y+a.gh; });
         if(mode === 'erase' && hitIdx !== -1) { map.splice(hitIdx, 1); selIdx = -1; save(); }
-        else if(mode === 'move') { if(hitIdx !== -1) { selIdx = hitIdx; lockedTarget = map[selIdx].id; } else if(activeAsset !== -1) { const a = assets[activeAsset]; const nx = Math.round(rawG.x)-(a.gw-1), ny = Math.round(rawG.y)-(a.gh-1); const newObj = {id: Date.now(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO}; map.push(newObj); selIdx = map.length-1; lockedTarget = newObj.id; save(); } else { drag = true; } }
+        else if(mode === 'move') { 
+            if(hitIdx !== -1) { selIdx = hitIdx; lockedTarget = map[selIdx].id; } 
+            else if(activeAsset !== -1) { 
+                const a = assets[activeAsset]; 
+                // ★設置時に、育美さんの補正値(ox, oy)を適用
+                const nx = Math.round(rawG.x - (a.gw-1)) + a.ox; 
+                const ny = Math.round(rawG.y - (a.gh-1)) + a.oy;
+                const newObj = {id: Date.now(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO}; 
+                map.push(newObj); map.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
+                selIdx = map.findIndex(d => d.id === newObj.id); lockedTarget = newObj.id; save(); 
+            } else { drag = true; } 
+        }
     }
     render();
 }, {passive: false});
@@ -141,7 +157,15 @@ cvs.addEventListener('touchmove', e => {
         const zoomFactor = dist / lastDist; cam.z *= zoomFactor; cam.x = midX - (midX - cam.x) * zoomFactor; cam.y = midY - (midY - cam.y) * zoomFactor; lastDist = dist;
     } else if(!pinch && mode === 'move') {
         const t = e.touches[0]; const rawG = toG(t.clientX, t.clientY);
-        if(lockedTarget !== -1) { const idx = map.findIndex(d => d.id === lockedTarget); if(idx !== -1) { const d = map[idx]; const a = assets[d.aIdx]; d.x = Math.round(rawG.x)-(a.gw-1); d.y = Math.round(rawG.y)-(a.gh-1); save(); } }
+        if(lockedTarget !== -1) { 
+            const idx = map.findIndex(d => d.id === lockedTarget); 
+            if(idx !== -1) { 
+                const d = map[idx]; const a = assets[d.aIdx]; 
+                d.x = Math.round(rawG.x - (a.gw-1)) + a.ox; 
+                d.y = Math.round(rawG.y - (a.gh-1)) + a.oy;
+                save(); 
+            } 
+        }
         else if(drag) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
         lastT = {x: t.clientX, y: t.clientY};
     }
@@ -150,13 +174,13 @@ cvs.addEventListener('touchmove', e => {
 
 cvs.addEventListener('touchend', e => { if(e.touches.length === 0) { drag = pinch = false; lockedTarget = -1; } render(); });
 function setMode(m) { mode = m; penStart = null; document.querySelectorAll('.mode-row button').forEach(b => b.classList.remove('active')); document.getElementById(`m-${m}`).classList.add('active'); render(); }
-window.adjS = (v) => { if(selIdx!==-1){ map[selIdx].s += v; save(); render(); } };
+window.adjS = (v) => { if(selIdx!==-1){ map[selIdx].s = parseFloat((map[selIdx].s + v).toFixed(2)); save(); render(); } };
 window.adjO = (v) => { if(selIdx!==-1){ map[selIdx].off += v; save(); render(); } };
-window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; save(); render(); } };
+window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x = parseFloat((map[selIdx].x + dx).toFixed(1)); map[selIdx].y = parseFloat((map[selIdx].y + dy).toFixed(1)); save(); render(); } };
 function addThumb(idx) { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`; d.onclick = () => { selIdx = -1; activeAsset = idx; setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); render(); }; document.getElementById('item-list').appendChild(d); }
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function save() { localStorage.setItem('map_v17', JSON.stringify({m:map, l:lines})); }
-function load() { const s = localStorage.getItem('map_v17'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
+function save() { localStorage.setItem('map_v18', JSON.stringify({m:map, l:lines})); }
+function load() { const s = localStorage.getItem('map_v18'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
 function crop(img) { const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } const w = x2-x1+1, h = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h; c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
 function exportImage() { deselect(); render(); const dataUrl = cvs.toDataURL("image/png"); const overlay = document.getElementById('export-overlay'); const img = document.getElementById('export-img'); img.src = dataUrl; overlay.style.display = 'flex'; }
 window.clearAll = () => { if(confirm("全消去しますか？")){ localStorage.clear(); location.reload(); } };
