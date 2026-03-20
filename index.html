@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v24.8.0</title>
+    <title>避難所レイアウト v24.9.0</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -31,13 +31,18 @@
         #m-erase.active { background: #8e8e93; border-color: #636366; }
         .clear-btn { height: 32px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; font-weight: bold; }
         .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
-        #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; z-index: 50; }
+        
+        /* 数値表示用タグ */
+        #info-tag { position: absolute; top: 85px; left: 10px; background: rgba(0,122,255,0.85); color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px; z-index: 50; font-family: monospace; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 6px 12px; border-radius: 12px; font-size: 12px; z-index: 50; }
+        
         #save-overlap { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:200; display:none; flex-direction:column; align-items:center; justify-content:center; color:white; }
         #save-overlap img { max-width:90%; max-height:70%; border:2px solid white; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
 <canvas id="cvs"></canvas>
+<div id="info-tag">選択なし</div>
 <div id="zoom-tag">Zoom: 100%</div>
 <div id="save-overlap" onclick="this.style.display='none'"><p style="font-size:14px; margin-bottom:10px;">画像を長押しして保存</p><img id="out-img"><p style="margin-top:15px; font-size:12px; opacity:0.7;">タップして戻る</p></div>
 
@@ -64,7 +69,6 @@
 </div>
 
 <script>
-// --- プリセット設定エリア (1.9ベースに微調整) ---
 const PRESETS = [
     { name: "本部", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.9, o: -8 },
     { name: "要塞", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.9, o: -8 },
@@ -76,10 +80,10 @@ const PRESETS = [
     { name: "岩2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 1.9, o: 0 },
     { name: "岩1", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK1.png", s: 1.9, o: 0 }
 ];
-// ----------------------------
 
 const cvs = document.getElementById('cvs'); const ctx = cvs.getContext('2d');
 const sizeS = document.getElementById('size-s'); const offS = document.getElementById('off-s');
+const infoTag = document.getElementById('info-tag');
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], edgeLines = [], selIdx = -1, activeAsset = -1, mode = 'move';
@@ -100,7 +104,7 @@ async function loadPresets() {
                 const src = crop(img);
                 const i2 = new Image();
                 i2.onload = () => {
-                    assets.push({ img: i2, src, defS: p.s, defO: p.o, url: p.url });
+                    assets.push({ img: i2, src, defS: p.s, defO: p.o, url: p.url, name: p.name });
                     addThumb(assets.length - 1);
                     resolve();
                 };
@@ -130,25 +134,31 @@ function render(isExport = false) {
     }
     let drawList = [];
     map.forEach((d, i) => drawList.push({ type: 'img', data: d, sort: d.x + d.y, originalIdx: i }));
-    edgeLines.forEach((l, i) => drawList.push({ type: 'line', data: l, sort: Math.max(l.x1, l.x2) + Math.max(l.y1, l.y2), originalIdx: i }));
     drawList.sort((a, b) => a.sort - b.sort);
     drawList.forEach(obj => {
-        if(obj.type === 'img') {
-            const d = obj.data; const a = assets[d.aIdx]; if(!a || !a.img) return;
-            const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
-            const anchor = toS(d.x + 1, d.y + 1);
-            ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + (d.off || 0), w, h);
-            if(!isExport && selIdx === obj.originalIdx) {
-                ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
-                let pS = anchor, pW = {x:anchor.x-(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pE = {x:anchor.x+(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pN = {x:anchor.x, y:anchor.y-T_H*d.s};
-                ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke();
-            }
-        } else {
-            const l = obj.data; ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
-            let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+        const d = obj.data; const a = assets[d.aIdx]; if(!a || !a.img) return;
+        const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
+        const anchor = toS(d.x + 1, d.y + 1);
+        ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + (d.off || 0), w, h);
+        if(!isExport && selIdx === obj.originalIdx) {
+            ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
+            let pS = anchor, pW = {x:anchor.x-(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pE = {x:anchor.x+(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pN = {x:anchor.x, y:anchor.y-T_H*d.s};
+            ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke();
         }
     });
     ctx.restore();
+    updateInfo();
+}
+
+function updateInfo() {
+    if(selIdx !== -1) {
+        const d = map[selIdx];
+        const a = assets[d.aIdx];
+        infoTag.style.display = 'block';
+        infoTag.innerText = `${a.name || '画像'}: s=${d.s.toFixed(1)}, o=${d.off}`;
+    } else {
+        infoTag.style.display = 'none';
+    }
 }
 
 function exportImage() { deselect(); render(true); document.getElementById('out-img').src = cvs.toDataURL('image/png'); document.getElementById('save-overlap').style.display = 'flex'; render(); }
@@ -208,7 +218,6 @@ function syncSliders() {
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); syncSliders(); render(); };
 function setMode(m) { mode = m; selIdx = -1; if(m!=='move') activeAsset = -1; ['m-move','m-pen','m-erase'].forEach(id => document.getElementById(id).className = id===`m-${m}`?'active':''); render(); }
 document.getElementById('m-move').onclick = () => setMode('move');
-document.getElementById('m-pen').onclick = () => setMode('pen');
 document.getElementById('m-erase').onclick = () => setMode('erase');
 
 document.getElementById('img-in').onchange = (e) => {
@@ -216,7 +225,7 @@ document.getElementById('img-in').onchange = (e) => {
         const r = new FileReader(); r.onload = (ev) => {
             const i = new Image(); i.onload = () => {
                 const src = crop(i); const i2 = new Image();
-                i2.onload = () => { assets.push({img:i2, src, defS:1, defO:0}); addThumb(assets.length-1); save(); }; i2.src = src;
+                i2.onload = () => { assets.push({img:i2, src, defS:1, defO:0, name:f.name}); addThumb(assets.length-1); save(); }; i2.src = src;
             }; i.src = ev.target.result;
         }; r.readAsDataURL(f);
     }
@@ -238,11 +247,11 @@ function addThumb(idx) {
     document.getElementById('item-list').appendChild(d);
 }
 
-function save() { localStorage.setItem('map_v40', JSON.stringify({m:map, el:edgeLines, a:assets.filter(a=>!PRESETS.some(p=>p.url===a.url)).map(a=>({src:a.src, defS:a.defS, defO:a.defO}))})); }
+function save() { localStorage.setItem('map_v40', JSON.stringify({m:map, a:assets.filter(a=>!PRESETS.some(p=>p.url===a.url)).map(a=>({src:a.src, defS:a.defS, defO:a.defO, name:a.name}))})); }
 function load() {
     const s = localStorage.getItem('map_v40'); if(!s) return;
-    const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
-    d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets.push({img, src:ad.src, defS:ad.defS||1, defO:ad.defO||0}); addThumb(assets.length-1); render(); }; img.src = ad.src; });
+    const d = JSON.parse(s); map = d.m || [];
+    if(d.a) d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets.push({img, src:ad.src, defS:ad.defS||1, defO:ad.defO||0, name:ad.name}); addThumb(assets.length-1); render(); }; img.src = ad.src; });
 }
 
 window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; render(); save(); } };
