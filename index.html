@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.2.0</title>
+    <title>避難所レイアウト v27.3.0</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
         canvas { display: block; background: #f0f0f0; }
-        #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; }
+        #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; -webkit-overflow-scrolling: touch; }
         #item-list { display: flex; gap: 8px; align-items: center; }
         .thumb { width: 50px; height: 50px; border-radius: 6px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; }
         .thumb.selected { border-color: #007aff; border-width: 3px; box-shadow: 0 0 10px rgba(0,122,255,0.3); }
         .deselect-btn { width: 50px; height: 50px; border-radius: 6px; border: 1px solid #ccc; background: #eee; color: #666; font-size: 10px; font-weight: bold; flex-shrink: 0; }
+        #upload-label { width: 50px; height: 50px; border: 2px dashed #bbb; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 20px; color: #999; flex-shrink: 0; background: #fff; cursor: pointer; }
         #bot-panel { position: absolute; bottom: 0; width: 100%; height: var(--bot-h); background: rgba(255,255,255,0.98); border-top: 1px solid #ccc; padding: 12px; box-sizing: border-box; z-index: 100; display: flex; flex-direction: column; gap: 12px; }
         .slider-section { display: flex; flex-direction: column; gap: 8px; }
         .row { display: flex; align-items: center; gap: 6px; }
@@ -39,7 +40,12 @@
 <div id="info-tag" onclick="copyInfo()"></div>
 <div id="copy-toast">コピーしました！</div>
 
-<div id="top-panel"><div id="item-list"><button class="deselect-btn" onclick="deselect()">選択<br>解除</button></div></div>
+<div id="top-panel">
+    <div id="item-list">
+        <button class="deselect-btn" onclick="deselect()">選択<br>解除</button>
+        <label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple onchange="handleFiles(this.files)"></label>
+    </div>
+</div>
 
 <div id="bot-panel">
     <div class="slider-section">
@@ -57,7 +63,6 @@
 </div>
 
 <script>
-// --- Ikumi's Settings (gw: GridWidth, gh: GridHeight) ---
 const PRESETS = [
     { name: "HQ", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.6, o: 1, dx: 1.9, dy: 1.8, gw: 1, gh: 1 },
     { name: "DOOM", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.6, o: -3, dx: 1.8, dy: 2.0, gw: 1, gh: 1 },
@@ -77,7 +82,7 @@ const toast = document.getElementById('copy-toast');
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], selIdx = -1, activeAsset = -1, mode = 'move';
-let drag = false, pinch = false, lastDist = 0, lastMid = {x:0, y:0}, lastT = {x:0, y:0}, hasMoved = false, isClickReady = false;
+let drag = false, pinch = false, lastDist = 0, lastT = {x: 0, y: 0}, hasMoved = false, isClickReady = false;
 
 function init() {
     cvs.width = window.innerWidth; cvs.height = window.innerHeight;
@@ -101,6 +106,26 @@ async function loadPresets() {
         });
     }
 }
+
+// 外部ファイル読み込み用
+window.handleFiles = (files) => {
+    Array.from(files).forEach(f => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const src = crop(img); const i2 = new Image();
+                i2.onload = () => {
+                    assets.push({ img: i2, src, defS: 1, defO: 0, dx: 0, dy: 0, gw: 1, gh: 1, name: f.name });
+                    addThumb(assets.length - 1);
+                };
+                i2.src = src;
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(f);
+    });
+};
 
 const toS = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
 const toG = (sx, sy) => {
@@ -201,8 +226,8 @@ function addThumb(idx) {
     document.getElementById('item-list').appendChild(d);
 }
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function save() { localStorage.setItem('map_v43', JSON.stringify({m:map})); }
-function load() { const s = localStorage.getItem('map_v43'); if(s) { map = JSON.parse(s).m; } }
+function save() { localStorage.setItem('map_v44', JSON.stringify({m:map})); }
+function load() { const s = localStorage.getItem('map_v44'); if(s) { map = JSON.parse(s).m; } }
 function crop(img) {
     const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0);
     const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0;
