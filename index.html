@@ -3,37 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v28.0.6</title>
+    <title>避難所レイアウト v28.0.7</title>
     <style>
-        :root { --top-h: 75px; --bot-h: 300px; }
+        :root { --top-h: 70px; --bot-h: 240px; } /* 高さをさらに圧縮 */
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
         canvas { display: block; background: #f0f0f0; }
         #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; -webkit-overflow-scrolling: touch; }
         #item-list { display: flex; gap: 8px; align-items: center; }
-        .thumb { width: 50px; height: 50px; border-radius: 6px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; }
-        .thumb.selected { border-color: #007aff; border-width: 3px; box-shadow: 0 0 10px rgba(0,122,255,0.3); }
-        .deselect-btn { width: 50px; height: 50px; border-radius: 6px; border: 1px solid #ccc; background: #eee; color: #666; font-size: 10px; font-weight: bold; flex-shrink: 0; }
-        #upload-label { width: 50px; height: 50px; border: 2px dashed #bbb; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 20px; color: #999; flex-shrink: 0; background: #fff; }
-        #bot-panel { position: absolute; bottom: 0; width: 100%; height: var(--bot-h); background: rgba(255,255,255,0.98); border-top: 1px solid #ccc; padding: 10px; box-sizing: border-box; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
+        .thumb { width: 45px; height: 45px; border-radius: 6px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; }
+        .thumb.selected { border-color: #007aff; border-width: 3px; }
+        .deselect-btn { width: 45px; height: 45px; border-radius: 6px; border: 1px solid #ccc; background: #eee; color: #666; font-size: 9px; font-weight: bold; flex-shrink: 0; }
+        #upload-label { width: 45px; height: 45px; border: 2px dashed #bbb; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 20px; color: #999; flex-shrink: 0; background: #fff; }
+        #bot-panel { position: absolute; bottom: 0; width: 100%; height: var(--bot-h); background: rgba(255,255,255,0.98); border-top: 1px solid #ccc; padding: 8px 10px; box-sizing: border-box; z-index: 100; display: flex; flex-direction: column; gap: 4px; }
         .row { display: flex; align-items: center; gap: 6px; }
         .row label { font-size: 11px; font-weight: bold; width: 35px; }
-        input[type="range"] { flex: 1; height: 32px; }
-        .prec-btn { width: 38px; height: 35px; font-size: 18px; border: 1px solid #ccc; background: #fff; border-radius: 6px; }
-        .tool-section { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-        #nudge-grid { display: grid; grid-template-columns: repeat(3, 40px); gap: 4px; }
-        #nudge-grid button { font-size: 20px; border: 1px solid #ccc; background: #fff; border-radius: 8px; }
-        .mode-box { flex: 1; display: flex; flex-direction: column; gap: 6px; }
-        .mode-row { display: flex; gap: 4px; flex-wrap: wrap; }
-        .mode-row button { flex: 1; min-width: 50px; height: 36px; font-size: 10px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
+        input[type="range"] { flex: 1; height: 28px; }
+        .prec-btn { width: 34px; height: 32px; font-size: 16px; border: 1px solid #ccc; background: #fff; border-radius: 6px; }
+        .tool-section { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-top: 2px; }
+        #nudge-grid { display: grid; grid-template-columns: repeat(3, 38px); gap: 3px; }
+        #nudge-grid button { height: 38px; font-size: 18px; border: 1px solid #ccc; background: #fff; border-radius: 6px; }
+        .mode-box { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+        .mode-row { display: flex; gap: 3px; flex-wrap: wrap; }
+        .mode-row button { flex: 1; min-width: 48px; height: 32px; font-size: 10px; font-weight: bold; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
         .mode-row button.active { background: #007aff; color: #fff; }
-        .data-row { display: flex; gap: 4px; }
-        .data-btn { flex: 1; height: 36px; font-size: 10px; font-weight: bold; border-radius: 8px; border: none; color: white; }
+        .data-row { display: flex; gap: 3px; }
+        .data-btn { flex: 1; height: 32px; font-size: 10px; font-weight: bold; border-radius: 6px; border: none; color: white; }
         .btn-out { background: #5856d6; }
         .btn-in { background: #ff9500; }
         .btn-clr { background: #ff3b30; }
-        .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
+        .save-btn { height: 34px; font-size: 13px; background: #34c759; border: none; border-radius: 6px; color: white; font-weight: bold; }
         #export-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        #export-img { max-width: 90%; max-height: 75%; border: 2px solid #fff; border-radius: 8px; }
+        #export-img { max-width: 90%; max-height: 75%; border: 2px solid #fff; }
     </style>
 </head>
 <body>
@@ -54,15 +54,16 @@
             <div class="mode-row">
                 <button id="m-move" onclick="setMode('move')">移動</button>
                 <button id="m-pen" onclick="setMode('pen')">ペン</button>
-                <button id="m-p-erase" onclick="setMode('p-erase')">線消し</button>
+                <button id="m-p-erase" onclick="setMode('p-erase')">線消</button>
                 <button id="m-erase" onclick="setMode('erase')">消去</button>
             </div>
         </div>
     </div>
 </div>
-<div id="export-overlay" onclick="this.style.display='none'"><img id="export-img" src=""><p style="color:white;text-align:center;">長押しで保存</p></div>
+<div id="export-overlay" onclick="this.style.display='none'"><img id="export-img" src=""><p style="color:white;text-align:center;font-size:12px;">長押しで保存</p></div>
 
 <script>
+// (PRESETSなどの基本ロジックは前回と同じなので、描画関連の修正を保持)
 const PRESETS = [
     { name: "HQ", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.6, o: 1, gw: 2, gh: 2, ox: -0.1, oy: -0.2 },
     { name: "DOOM", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.6, o: -3, gw: 2, gh: 2, ox: -0.2, oy: 0 },
@@ -171,19 +172,19 @@ cvs.addEventListener('touchend', () => { drag = pinch = false; lockedTarget = -1
 function exportData() {
     const data = JSON.stringify({m: map, l: lines});
     const encoded = btoa(unescape(encodeURIComponent(data)));
-    prompt("【出力】コードをコピーしてください", encoded);
+    prompt("【出力】コピーして保存", encoded);
 }
 function importData() {
-    const code = prompt("【読込】コードを貼り付けてください");
+    const code = prompt("【読込】コードを貼付");
     if(!code) return;
     try {
         const decoded = decodeURIComponent(escape(atob(code)));
         const d = JSON.parse(decoded);
         map = d.m || []; lines = d.l || [];
         save(); render();
-    } catch(e) { alert("無効なコードです"); }
+    } catch(e) { alert("エラー"); }
 }
-window.clearAll = () => { if(confirm("【リセット】全消去してよろしいですか？")){ map = []; lines = []; save(); render(); } };
+window.clearAll = () => { if(confirm("リセットしますか？")){ map = []; lines = []; save(); render(); } };
 
 function setMode(m) { mode = m; document.querySelectorAll('.mode-row button').forEach(b => b.classList.remove('active')); document.getElementById(`m-${m}`).classList.add('active'); render(); }
 window.adjS = (v) => { if(selIdx!==-1){ map[selIdx].s = parseFloat((map[selIdx].s + v).toFixed(2)); save(); render(); } };
