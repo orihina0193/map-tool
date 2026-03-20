@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.6.0</title>
+    <title>避難所レイアウト v27.7.0</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -146,8 +146,9 @@ function render() {
         const d = obj.data; const a = assets[d.aIdx]; if(!a || !a.img) return;
         const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
         
-        // --- 修正箇所：マスの南端（d.x + a.gw, d.y + a.gh）を起点にする ---
-        const anchor = toS(d.x + a.gw, d.y + a.gh);
+        // --- 修正箇所：起点（anchor）を「マスの中心」にする ---
+        // (d.x + a.gw / 2, d.y + a.gh / 2) とすることで、1x2でも2x2でも中心になります
+        const anchor = toS(d.x + a.gw / 2, d.y + a.gh / 2);
         ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + d.off, w, h);
 
         if(selIdx === obj.originalIdx) {
@@ -197,8 +198,7 @@ cvs.addEventListener('touchend', e => {
         if(mode === 'move') {
             if(activeAsset !== -1) {
                 const a = assets[activeAsset];
-                // 配置時の初期座標も gw, gh を考慮して手前に来るように微調整
-                map.push({x:Math.floor(g.x) - (a.gw - 1), y:Math.floor(g.y) - (a.gh - 1), aIdx:activeAsset, s:a.defS, off:a.defO});
+                map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:a.defS, off:a.defO});
                 selIdx = map.length - 1; syncSliders();
             } else {
                 let h = map.findLastIndex(d => {
@@ -229,8 +229,8 @@ function addThumb(idx) {
     document.getElementById('item-list').appendChild(d);
 }
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function save() { localStorage.setItem('map_v47', JSON.stringify({m:map})); }
-function load() { const s = localStorage.getItem('map_v47'); if(s) { map = JSON.parse(s).m; } }
+function save() { localStorage.setItem('map_v48', JSON.stringify({m:map})); }
+function load() { const s = localStorage.getItem('map_v48'); if(s) { map = JSON.parse(s).m; } }
 function crop(img) {
     const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0);
     const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0;
