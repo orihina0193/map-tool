@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.9.5</title>
+    <title>避難所レイアウト v27.9.6</title>
     <style>
         :root { --top-h: 75px; --bot-h: 260px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -30,6 +30,11 @@
         .mode-row button.active.erase-mode { background: #ff3b30; border-color: #c41e16; }
         .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
         .clear-btn { height: 30px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; }
+
+        /* 保存用プレビューのスタイル */
+        #export-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        #export-img { max-width: 90%; max-height: 75%; border: 2px solid #fff; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        #export-overlay p { color: white; margin-top: 15px; font-size: 14px; font-weight: bold; text-align: center; line-height: 1.6; }
     </style>
 </head>
 <body>
@@ -55,7 +60,13 @@
     </div>
 </div>
 
+<div id="export-overlay" onclick="this.style.display='none'">
+    <img id="export-img" src="">
+    <p>画像を長押しして「写真に追加」や<br>「画像を保存」を選んでください。<br><span style="font-size: 11px; font-weight: normal; opacity: 0.8;">(タップで編集に戻る)</span></p>
+</div>
+
 <script>
+// (中略: PRESETS, assets, map, lines などの変数定義と初期化ロジックは前回同様)
 const PRESETS = [
     { name: "HQ", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.6, o: 1, gw: 2, gh: 2 },
     { name: "DOOM", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.6, o: -3, gw: 2, gh: 2 },
@@ -71,7 +82,7 @@ const cvs = document.getElementById('cvs'); const ctx = cvs.getContext('2d');
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], lines = [], selIdx = -1, activeAsset = -1, mode = 'move';
-let drag = false, pinch = false, lockedTarget = -1; // ★ターゲットをIDで固定
+let drag = false, pinch = false, lockedTarget = -1;
 let lastT = {x: 0, y: 0}, lastG = null, lastDist = 0;
 
 function init() {
@@ -130,60 +141,41 @@ function isSpaceEmpty(gx, gy, gw, gh, ignoreIdx = -1) {
     });
 }
 
+// タッチイベント関連 (v27.9.5の内容を継承)
 cvs.addEventListener('touchstart', e => {
     if(e.touches.length >= 2) { pinch = true; drag = false; lockedTarget = -1; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); return; }
-    
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
     const g = toG(t.clientX, t.clientY);
     const hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return g.x >= d.x && g.x < d.x+a.gw && g.y >= d.y && g.y < d.y+a.gh; });
-
     if(mode === 'move') {
-        if(hitIdx !== -1) {
-            selIdx = hitIdx; lockedTarget = map[selIdx].id; // ★今触ったやつをロック
-        } else if(activeAsset !== -1) {
-            const a = assets[activeAsset];
-            const nx = g.x-(a.gw-1), ny = g.y-(a.gh-1);
+        if(hitIdx !== -1) { selIdx = hitIdx; lockedTarget = map[selIdx].id; }
+        else if(activeAsset !== -1) {
+            const a = assets[activeAsset]; const nx = g.x-(a.gw-1), ny = g.y-(a.gh-1);
             if(isSpaceEmpty(nx, ny, a.gw, a.gh)) {
                 const newObj = {id: Date.now(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO};
                 map.push(newObj); map.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
-                selIdx = map.findIndex(d => d.id === newObj.id);
-                lockedTarget = newObj.id; // ★新しく置いたやつをロック
-                save();
+                selIdx = map.findIndex(d => d.id === newObj.id); lockedTarget = newObj.id; save();
             }
-        } else {
-            drag = true;
-        }
-    } else if(mode === 'erase' && hitIdx !== -1) {
-        map.splice(hitIdx, 1); selIdx = -1; save();
-    }
+        } else { drag = true; }
+    } else if(mode === 'erase' && hitIdx !== -1) { map.splice(hitIdx, 1); selIdx = -1; save(); }
     render();
 }, {passive: false});
 
 cvs.addEventListener('touchmove', e => {
     e.preventDefault();
     if(pinch && e.touches.length >= 2) {
-        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2, midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-        const zoomFactor = dist / lastDist;
-        cam.z *= zoomFactor;
-        cam.x = midX - (midX - cam.x) * zoomFactor;
-        cam.y = midY - (midY - cam.y) * zoomFactor;
+        const zoomFactor = dist / lastDist; cam.z *= zoomFactor;
+        cam.x = midX - (midX - cam.x) * zoomFactor; cam.y = midY - (midY - cam.y) * zoomFactor;
         lastDist = dist;
     } else if(!pinch) {
-        const t = e.touches[0];
-        const g = toG(t.clientX, t.clientY);
-
-        // ★ロックされたターゲットのみを動かす
+        const t = e.touches[0]; const g = toG(t.clientX, t.clientY);
         if(lockedTarget !== -1) {
             const idx = map.findIndex(d => d.id === lockedTarget);
             if(idx !== -1) {
-                selIdx = idx; // 念のためselIdxも同期
-                const d = map[idx]; const a = assets[d.aIdx];
-                const nx = g.x-(a.gw-1), ny = g.y-(a.gh-1);
-                if(isSpaceEmpty(nx, ny, a.gw, a.gh, idx)) {
-                    d.x = nx; d.y = ny; save();
-                }
+                const d = map[idx]; const a = assets[d.aIdx]; const nx = g.x-(a.gw-1), ny = g.y-(a.gh-1);
+                if(isSpaceEmpty(nx, ny, a.gw, a.gh, idx)) { d.x = nx; d.y = ny; save(); }
             }
         } else if(mode === 'pen' || mode === 'p-erase') {
             if(lastG && (g.x !== lastG.x || g.y !== lastG.y)) {
@@ -191,22 +183,15 @@ cvs.addEventListener('touchmove', e => {
                 else { lines = lines.filter(l => !((l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))); save(); }
             }
             lastG = g;
-        } else if(drag) {
-            cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y);
-        }
+        } else if(drag) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
         lastT = {x: t.clientX, y: t.clientY};
     }
     render();
 }, {passive: false});
 
-cvs.addEventListener('touchend', e => {
-    if(e.touches.length === 0) {
-        drag = pinch = false; lockedTarget = -1; // ★指を離したらロック解除
-        map.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
-    }
-    render();
-});
+cvs.addEventListener('touchend', e => { if(e.touches.length === 0) { drag = pinch = false; lockedTarget = -1; map.sort((a,b)=>(a.x+a.y)-(b.x+b.y)); } render(); });
 
+// その他関数
 function setMode(m) { mode = m; document.querySelectorAll('.mode-row button').forEach(b => b.classList.remove('active')); document.getElementById(`m-${m}`).classList.add('active'); }
 window.adjS = (v) => { if(selIdx!==-1){ map[selIdx].s += v; save(); render(); } };
 window.adjO = (v) => { if(selIdx!==-1){ map[selIdx].off += v; save(); render(); } };
@@ -220,7 +205,18 @@ window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorA
 function save() { localStorage.setItem('map_final_v14', JSON.stringify({m:map, l:lines})); }
 function load() { const s = localStorage.getItem('map_final_v14'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
 function crop(img) { const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } const w = x2-x1+1, h = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h; c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
-function exportImage() { deselect(); render(); const link = document.createElement('a'); link.download = 'layout.png'; link.href = cvs.toDataURL(); link.click(); }
+
+// ★画像書き出し修正: 長押し保存用プレビューを表示
+function exportImage() {
+    deselect();
+    render();
+    const dataUrl = cvs.toDataURL("image/png");
+    const overlay = document.getElementById('export-overlay');
+    const img = document.getElementById('export-img');
+    img.src = dataUrl;
+    overlay.style.display = 'flex';
+}
+
 window.clearAll = () => { if(confirm("全消去しますか？")){ localStorage.clear(); location.reload(); } };
 init();
 </script>
