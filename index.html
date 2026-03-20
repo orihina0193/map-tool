@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.9.2</title>
+    <title>避難所レイアウト v27.9.3</title>
     <style>
         :root { --top-h: 75px; --bot-h: 260px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -130,15 +130,31 @@ function isSpaceEmpty(gx, gy, gw, gh) {
 }
 
 cvs.addEventListener('touchstart', e => {
-    if(e.touches.length >= 2) { pinch = true; drag = false; isActionable = false; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); return; }
+    if(e.touches.length >= 2) { 
+        pinch = true; drag = false; isActionable = false; 
+        lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); 
+        return; 
+    }
     const t = e.touches[0]; startT = {x: t.clientX, y: t.clientY}; lastT = {x: t.clientX, y: t.clientY}; isActionable = true; drag = true;
 }, {passive: false});
 
 cvs.addEventListener('touchmove', e => {
     e.preventDefault();
     if(pinch && e.touches.length >= 2) {
+        // ★ズームの起点（2指の中点）を計算
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        
         const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-        cam.z *= (dist / lastDist); lastDist = dist;
+        const zoomFactor = dist / lastDist;
+        
+        // ★中点を基準にしたスケーリング計算
+        const oldZ = cam.z;
+        cam.z *= zoomFactor;
+        cam.x = midX - (midX - cam.x) * zoomFactor;
+        cam.y = midY - (midY - cam.y) * zoomFactor;
+        
+        lastDist = dist;
     } else if(!pinch) {
         const t = e.touches[0]; if(Math.hypot(t.clientX - startT.x, t.clientY - startT.y) > 10) isActionable = false;
         if(mode === 'pen' || mode === 'p-erase') {
@@ -159,11 +175,9 @@ cvs.addEventListener('touchend', e => {
         if(isActionable && !pinch) {
             const g = toG(startT.x, startT.y);
             const hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return g.x >= d.x && g.x < d.x+a.gw && g.y >= d.y && g.y < d.y+a.gh; });
-
             if(mode === 'move') {
                 if(activeAsset !== -1) { 
                     const a = assets[activeAsset];
-                    // ★重要修正：設置位置（左上座標）を、タップしたマスが「右下角」になるよう計算
                     const nx = g.x-(a.gw-1), ny = g.y-(a.gh-1);
                     if(hitIdx === -1 && isSpaceEmpty(nx, ny, a.gw, a.gh)) {
                         const newObj = {id: Date.now(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO};
@@ -188,8 +202,8 @@ function addThumb(idx) {
     document.getElementById('item-list').appendChild(d); 
 }
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function save() { localStorage.setItem('map_final_v12', JSON.stringify({m:map, l:lines})); }
-function load() { const s = localStorage.getItem('map_final_v12'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
+function save() { localStorage.setItem('map_final_v13', JSON.stringify({m:map, l:lines})); }
+function load() { const s = localStorage.getItem('map_final_v13'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
 function crop(img) { const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } const w = x2-x1+1, h = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h; c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
 function exportImage() { deselect(); render(); const link = document.createElement('a'); link.download = 'layout.png'; link.href = cvs.toDataURL(); link.click(); }
 window.clearAll = () => { if(confirm("全消去しますか？")){ localStorage.clear(); location.reload(); } };
