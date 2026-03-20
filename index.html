@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v24.7.0</title>
+    <title>避難所レイアウト v24.8.0</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -64,18 +64,17 @@
 </div>
 
 <script>
-// --- プリセット設定エリア (Ikumiさんの指定マス目に合わせてsとoを調整) ---
-// s: サイズ(マスの横幅基準), o: 接地オフセット(上下微調整)
+// --- プリセット設定エリア (1.9ベースに微調整) ---
 const PRESETS = [
-    { name: "本部", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 2.2, o: -12 },
-    { name: "要塞", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 2.2, o: -12 },
-    { name: "病院", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/MED.png", s: 2.0, o: -8 },
-    { name: "倉庫", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/SRG.png", s: 2.0, o: -8 },
-    { name: "資源地", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/RSS.png", s: 1.8, o: -2 },
-    { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 2.0, o: -10 },
-    { name: "偵察塔", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/OP.png", s: 1.1, o: -5 },
-    { name: "岩2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 1.6, o: 0 },
-    { name: "岩1", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK1.png", s: 1.6, o: 0 }
+    { name: "本部", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.9, o: -8 },
+    { name: "要塞", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.9, o: -8 },
+    { name: "病院", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/MED.png", s: 1.9, o: -6 },
+    { name: "倉庫", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/SRG.png", s: 1.9, o: -6 },
+    { name: "資源地", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/RSS.png", s: 1.9, o: -2 },
+    { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 1.9, o: -8 },
+    { name: "偵察塔", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/OP.png", s: 0.9, o: -4 },
+    { name: "岩2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 1.9, o: 0 },
+    { name: "岩1", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK1.png", s: 1.9, o: 0 }
 ];
 // ----------------------------
 
