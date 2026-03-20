@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.9.8</title>
+    <title>避難所レイアウト v27.9.9</title>
     <style>
         :root { --top-h: 75px; --bot-h: 260px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -28,6 +28,7 @@
         .mode-row button.active { background: #007aff; color: #fff; }
         .mode-row button.active.erase-mode { background: #ff3b30; }
         .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
+        .clear-btn { height: 30px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; }
         #export-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
         #export-img { max-width: 90%; max-height: 75%; border: 2px solid #fff; }
     </style>
@@ -48,6 +49,7 @@
                 <button id="m-p-erase" onclick="setMode('p-erase')">ペン消し</button>
                 <button id="m-erase" onclick="setMode('erase')" class="erase-mode">建物消去</button>
             </div>
+            <button class="clear-btn" onclick="clearAll()">リセット</button>
         </div>
     </div>
 </div>
@@ -61,7 +63,6 @@ let assets = [], map = [], lines = [], selIdx = -1, activeAsset = -1, mode = 'mo
 let drag = false, pinch = false, lockedTarget = -1, penStart = null;
 let lastT = {x: 0, y: 0}, lastDist = 0;
 
-// プリセット読み込みなどは省略せず、全コード維持
 const PRESETS = [
     { name: "HQ", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.6, o: 1, gw: 2, gh: 2 },
     { name: "DOOM", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.6, o: -3, gw: 2, gh: 2 },
@@ -91,108 +92,57 @@ async function loadPresets() {
 const toS = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
 const toG = (sx, sy) => {
     let x = (sx - cam.x)/cam.z, y = (sy - cam.y)/cam.z;
-    let gy = (y/(T_H/2) - x/(T_W/2))/2; 
-    // ★マスの中心(round)ではなく、交点(floor/ceil)への近さを取るためにそのまま返す
-    return { x: x/(T_W/2) + gy, y: gy };
+    let gy = (y/(T_H/2) - x/(T_W/2))/2; return { x: x/(T_W/2) + gy, y: gy };
 };
-
-// ★一番近い交点(グリッドの角)を計算する関数
 const getNearestCross = (gx, gy) => ({ x: Math.round(gx), y: Math.round(gy) });
 
 function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
-    
     ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1/cam.z;
     for(let i=-20; i<=40; i++){
         let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
-    
     lines.forEach(l => {
         ctx.beginPath(); ctx.strokeStyle = "rgba(255,0,0,0.6)"; ctx.lineWidth = 4/cam.z;
-        const s = toS(l.x1, l.y1), e = toS(l.x2, l.y2);
-        ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+        const s = toS(l.x1, l.y1), e = toS(l.x2, l.y2); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
     });
-
-    if(mode === 'pen' && penStart) {
-        const p = toS(penStart.x, penStart.y);
-        ctx.fillStyle = "red"; ctx.beginPath(); ctx.arc(p.x, p.y, 4/cam.z, 0, Math.PI*2); ctx.fill();
-    }
-    
+    if(mode === 'pen' && penStart) { const p = toS(penStart.x, penStart.y); ctx.fillStyle = "red"; ctx.beginPath(); ctx.arc(p.x, p.y, 4/cam.z, 0, Math.PI*2); ctx.fill(); }
     map.sort((a,b)=>(a.x+a.y)-(b.x+b.y)).forEach((d, i) => {
         const a = assets[d.aIdx]; if(!a) return;
-        const w = T_W * d.s, h = (a.img.height/a.img.width) * w;
-        const anchor = toS(d.x + a.gw, d.y + a.gh);
+        const w = T_W * d.s, h = (a.img.height/a.img.width) * w; const anchor = toS(d.x + a.gw, d.y + a.gh);
         ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + d.off, w, h);
-        if(selIdx === i) { 
-            ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2/cam.z; 
-            const pS = toS(d.x+a.gw, d.y+a.gh), pW = toS(d.x, d.y+a.gh), pE = toS(d.x+a.gw, d.y), pN = toS(d.x, d.y); 
-            ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke(); 
-        }
+        if(selIdx === i) { ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2/cam.z; const pS = toS(d.x+a.gw, d.y+a.gh), pW = toS(d.x, d.y+a.gh), pE = toS(d.x+a.gw, d.y), pN = toS(d.x, d.y); ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke(); }
     });
     ctx.restore();
 }
 
 cvs.addEventListener('touchstart', e => {
     if(e.touches.length >= 2) { pinch = true; drag = false; lockedTarget = -1; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); return; }
-    
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
-    const rawG = toG(t.clientX, t.clientY);
-    const crossG = getNearestCross(rawG.x, rawG.y); // ★交点にスナップ
-
-    if(mode === 'pen') {
-        if(!penStart) { penStart = crossG; } 
-        else {
-            if(penStart.x !== crossG.x || penStart.y !== crossG.y) {
-                lines.push({x1: penStart.x, y1: penStart.y, x2: crossG.x, y2: crossG.y});
-                save();
-            }
-            penStart = null;
-        }
-    } else if(mode === 'p-erase') {
-        // 線の判定（中点との距離で簡易判定）
-        lines = lines.filter(l => {
-            const mx = (l.x1 + l.x2) / 2, my = (l.y1 + l.y2) / 2;
-            const dist = Math.hypot(mx - rawG.x, my - rawG.y);
-            return dist > 0.4;
-        });
-        save();
-    } else if(mode === 'move' || mode === 'erase') {
+    const rawG = toG(t.clientX, t.clientY); const crossG = getNearestCross(rawG.x, rawG.y);
+    if(mode === 'pen') { if(!penStart) { penStart = crossG; } else { if(penStart.x !== crossG.x || penStart.y !== crossG.y) { lines.push({x1: penStart.x, y1: penStart.y, x2: crossG.x, y2: crossG.y}); save(); } penStart = null; } }
+    else if(mode === 'p-erase') { lines = lines.filter(l => { const mx = (l.x1 + l.x2) / 2, my = (l.y1 + l.y2) / 2; return Math.hypot(mx - rawG.x, my - rawG.y) > 0.4; }); save(); }
+    else if(mode === 'move' || mode === 'erase') {
         const gridPos = {x: Math.round(rawG.x), y: Math.round(rawG.y)};
         const hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return gridPos.x >= d.x && gridPos.x < d.x+a.gw && gridPos.y >= d.y && gridPos.y < d.y+a.gh; });
         if(mode === 'erase' && hitIdx !== -1) { map.splice(hitIdx, 1); selIdx = -1; save(); }
-        else if(mode === 'move') {
-            if(hitIdx !== -1) { selIdx = hitIdx; lockedTarget = map[selIdx].id; }
-            else if(activeAsset !== -1) {
-                const a = assets[activeAsset]; const nx = Math.round(rawG.x)-(a.gw-1), ny = Math.round(rawG.y)-(a.gh-1);
-                const newObj = {id: Date.now(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO};
-                map.push(newObj); selIdx = map.length-1; lockedTarget = newObj.id; save();
-            } else { drag = true; }
-        }
+        else if(mode === 'move') { if(hitIdx !== -1) { selIdx = hitIdx; lockedTarget = map[selIdx].id; } else if(activeAsset !== -1) { const a = assets[activeAsset]; const nx = Math.round(rawG.x)-(a.gw-1), ny = Math.round(rawG.y)-(a.gh-1); const newObj = {id: Date.now(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO}; map.push(newObj); selIdx = map.length-1; lockedTarget = newObj.id; save(); } else { drag = true; } }
     }
     render();
 }, {passive: false});
 
-// (以下、touchmove, touchend, save, load, crop, exportImage などの補助関数は維持)
 cvs.addEventListener('touchmove', e => {
     e.preventDefault();
     if(pinch && e.touches.length >= 2) {
         const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2, midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-        const zoomFactor = dist / lastDist; cam.z *= zoomFactor;
-        cam.x = midX - (midX - cam.x) * zoomFactor; cam.y = midY - (midY - cam.y) * zoomFactor;
-        lastDist = dist;
+        const zoomFactor = dist / lastDist; cam.z *= zoomFactor; cam.x = midX - (midX - cam.x) * zoomFactor; cam.y = midY - (midY - cam.y) * zoomFactor; lastDist = dist;
     } else if(!pinch && mode === 'move') {
         const t = e.touches[0]; const rawG = toG(t.clientX, t.clientY);
-        if(lockedTarget !== -1) {
-            const idx = map.findIndex(d => d.id === lockedTarget);
-            if(idx !== -1) {
-                const d = map[idx]; const a = assets[d.aIdx];
-                d.x = Math.round(rawG.x)-(a.gw-1); d.y = Math.round(rawG.y)-(a.gh-1);
-                save();
-            }
-        } else if(drag) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
+        if(lockedTarget !== -1) { const idx = map.findIndex(d => d.id === lockedTarget); if(idx !== -1) { const d = map[idx]; const a = assets[d.aIdx]; d.x = Math.round(rawG.x)-(a.gw-1); d.y = Math.round(rawG.y)-(a.gh-1); save(); } }
+        else if(drag) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
         lastT = {x: t.clientX, y: t.clientY};
     }
     render();
@@ -203,16 +153,13 @@ function setMode(m) { mode = m; penStart = null; document.querySelectorAll('.mod
 window.adjS = (v) => { if(selIdx!==-1){ map[selIdx].s += v; save(); render(); } };
 window.adjO = (v) => { if(selIdx!==-1){ map[selIdx].off += v; save(); render(); } };
 window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; save(); render(); } };
-function addThumb(idx) { 
-    const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`; 
-    d.onclick = () => { selIdx = -1; activeAsset = idx; setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); render(); }; 
-    document.getElementById('item-list').appendChild(d); 
-}
+function addThumb(idx) { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`; d.onclick = () => { selIdx = -1; activeAsset = idx; setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); render(); }; document.getElementById('item-list').appendChild(d); }
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function save() { localStorage.setItem('map_v16', JSON.stringify({m:map, l:lines})); }
-function load() { const s = localStorage.getItem('map_v16'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
+function save() { localStorage.setItem('map_v17', JSON.stringify({m:map, l:lines})); }
+function load() { const s = localStorage.getItem('map_v17'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
 function crop(img) { const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } const w = x2-x1+1, h = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h; c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
 function exportImage() { deselect(); render(); const dataUrl = cvs.toDataURL("image/png"); const overlay = document.getElementById('export-overlay'); const img = document.getElementById('export-img'); img.src = dataUrl; overlay.style.display = 'flex'; }
+window.clearAll = () => { if(confirm("全消去しますか？")){ localStorage.clear(); location.reload(); } };
 init();
 </script>
 </body>
