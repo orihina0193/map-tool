@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v25.0.1</title>
+    <title>避難所レイアウト v24.7.0</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -50,7 +50,7 @@
 
 <div id="bot-panel">
     <div class="slider-section">
-        <div class="row"><label>サイズ</label><button class="prec-btn" onclick="adjS(-0.1)">-</button><input type="range" id="size-s" min="0.1" max="10" step="0.1" value="1"><button class="prec-btn" onclick="adjS(0.1)">+</button></div>
+        <div class="row"><label>サイズ</label><button class="prec-btn" onclick="adjS(-0.1)">-</button><input type="range" id="size-s" min="0.1" max="5" step="0.1" value="1"><button class="prec-btn" onclick="adjS(0.1)">+</button></div>
         <div class="row"><label>接地</label><button class="prec-btn" onclick="adjO(-1)">-</button><input type="range" id="off-s" min="-100" max="100" step="1" value="0"><button class="prec-btn" onclick="adjO(1)">+</button></div>
     </div>
     <div class="tool-section">
@@ -64,17 +64,18 @@
 </div>
 
 <script>
-// --- プリセット設定エリア (Ikumi様カスタマイズ版) ---
+// --- プリセット設定エリア (Ikumiさんの指定マス目に合わせてsとoを調整) ---
+// s: サイズ(マスの横幅基準), o: 接地オフセット(上下微調整)
 const PRESETS = [
-    { name: "本部", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.6, o: 15, x: 0 }, 
-    { name: "要塞", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.6, o: 12, x: -1 },
-    { name: "病院", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/MED.png", s: 5.3, o: -1, x: 0 },
-    { name: "偵察塔", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/OP.png", s: 0.8, o: -2, x: 0 },
-    { name: "資源地", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/RSS.png", s: 1.7, o: -8, x: -1 },
-    { name: "倉庫", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/SRG.png", s: 1.7, o: -3, x: -1 },
-    { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 1.6, o: -3, x: 0 },
-    { name: "岩1", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK1.png", s: 0.8, o: 7, x: 0 },
-    { name: "岩2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 0.8, o: 1, x: -7 }
+    { name: "本部", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 2.2, o: -12 },
+    { name: "要塞", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 2.2, o: -12 },
+    { name: "病院", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/MED.png", s: 2.0, o: -8 },
+    { name: "倉庫", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/SRG.png", s: 2.0, o: -8 },
+    { name: "資源地", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/RSS.png", s: 1.8, o: -2 },
+    { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 2.0, o: -10 },
+    { name: "偵察塔", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/OP.png", s: 1.1, o: -5 },
+    { name: "岩2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 1.6, o: 0 },
+    { name: "岩1", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK1.png", s: 1.6, o: 0 }
 ];
 // ----------------------------
 
@@ -100,7 +101,7 @@ async function loadPresets() {
                 const src = crop(img);
                 const i2 = new Image();
                 i2.onload = () => {
-                    assets.push({ img: i2, src, defS: p.s, defO: p.o, defX: p.x||0, url: p.url });
+                    assets.push({ img: i2, src, defS: p.s, defO: p.o, url: p.url });
                     addThumb(assets.length - 1);
                     resolve();
                 };
@@ -184,7 +185,7 @@ cvs.addEventListener('touchend', e => {
         if(mode === 'move') {
             if(activeAsset !== -1) {
                 const a = assets[activeAsset];
-                map.push({x:Math.floor(g.x + (a.defX||0)), y:Math.floor(g.y), aIdx:activeAsset, s:a.defS, off:a.defO});
+                map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:a.defS, off:a.defO});
                 selIdx = map.length - 1; syncSliders();
             } else {
                 let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
@@ -216,7 +217,7 @@ document.getElementById('img-in').onchange = (e) => {
         const r = new FileReader(); r.onload = (ev) => {
             const i = new Image(); i.onload = () => {
                 const src = crop(i); const i2 = new Image();
-                i2.onload = () => { assets.push({img:i2, src, defS:1, defO:0, defX:0}); addThumb(assets.length-1); save(); }; i2.src = src;
+                i2.onload = () => { assets.push({img:i2, src, defS:1, defO:0}); addThumb(assets.length-1); save(); }; i2.src = src;
             }; i.src = ev.target.result;
         }; r.readAsDataURL(f);
     }
@@ -238,16 +239,16 @@ function addThumb(idx) {
     document.getElementById('item-list').appendChild(d);
 }
 
-function save() { localStorage.setItem('map_v40', JSON.stringify({m:map, el:edgeLines, a:assets.filter(a=>!PRESETS.some(p=>p.url===a.url)).map(a=>({src:a.src, defS:a.defS, defO:a.defO, defX:a.defX}))})); }
+function save() { localStorage.setItem('map_v40', JSON.stringify({m:map, el:edgeLines, a:assets.filter(a=>!PRESETS.some(p=>p.url===a.url)).map(a=>({src:a.src, defS:a.defS, defO:a.defO}))})); }
 function load() {
     const s = localStorage.getItem('map_v40'); if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
-    d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets.push({img, src:ad.src, defS:ad.defS||1, defO:ad.defO||0, defX:ad.defX||0}); addThumb(assets.length-1); render(); }; img.src = ad.src; });
+    d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets.push({img, src:ad.src, defS:ad.defS||1, defO:ad.defO||0}); addThumb(assets.length-1); render(); }; img.src = ad.src; });
 }
 
 window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; render(); save(); } };
 window.adjS = (v) => { 
-    let val = parseFloat(sizeS.value)+v; val=Math.max(0.1,Math.min(10,val)); sizeS.value=val.toFixed(1); 
+    let val = parseFloat(sizeS.value)+v; val=Math.max(0.1,Math.min(5,val)); sizeS.value=val.toFixed(1); 
     if(selIdx!==-1) map[selIdx].s=parseFloat(val); 
     if(activeAsset!==-1) assets[activeAsset].defS=parseFloat(val);
     save(); render(); 
