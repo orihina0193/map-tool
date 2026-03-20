@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.9.0</title>
+    <title>避難所レイアウト v27.9.2</title>
     <style>
         :root { --top-h: 75px; --bot-h: 260px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -122,25 +122,16 @@ function render() {
     ctx.restore();
 }
 
-// 指定した範囲のマスが空いているかチェック
 function isSpaceEmpty(gx, gy, gw, gh) {
     return !map.some(d => {
         const a = assets[d.aIdx];
-        // 既存の建物dと、新しい範囲が重なるか判定
         return !(gx + gw <= d.x || gx >= d.x + a.gw || gy + gh <= d.y || gy >= d.y + a.gh);
     });
 }
 
 cvs.addEventListener('touchstart', e => {
-    if(e.touches.length >= 2) { 
-        pinch = true; drag = false; isActionable = false; 
-        lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); 
-        return; 
-    }
-    const t = e.touches[0]; 
-    startT = {x: t.clientX, y: t.clientY}; lastT = {x: t.clientX, y: t.clientY};
-    isActionable = true;
-    drag = true;
+    if(e.touches.length >= 2) { pinch = true; drag = false; isActionable = false; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); return; }
+    const t = e.touches[0]; startT = {x: t.clientX, y: t.clientY}; lastT = {x: t.clientX, y: t.clientY}; isActionable = true; drag = true;
 }, {passive: false});
 
 cvs.addEventListener('touchmove', e => {
@@ -149,23 +140,15 @@ cvs.addEventListener('touchmove', e => {
         const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         cam.z *= (dist / lastDist); lastDist = dist;
     } else if(!pinch) {
-        const t = e.touches[0];
-        const moveDist = Math.hypot(t.clientX - startT.x, t.clientY - startT.y);
-        if(moveDist > 10) isActionable = false;
-
+        const t = e.touches[0]; if(Math.hypot(t.clientX - startT.x, t.clientY - startT.y) > 10) isActionable = false;
         if(mode === 'pen' || mode === 'p-erase') {
             const g = toG(t.clientX, t.clientY);
             if(lastG && (g.x !== lastG.x || g.y !== lastG.y)) {
-                if(mode === 'pen') {
-                    if(!lines.some(l => (l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))) { lines.push({x1: lastG.x, y1: lastG.y, x2: g.x, y2: g.y}); save(); }
-                } else {
-                    lines = lines.filter(l => !((l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))); save();
-                }
+                if(mode === 'pen') { if(!lines.some(l => (l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))) { lines.push({x1: lastG.x, y1: lastG.y, x2: g.x, y2: g.y}); save(); } }
+                else { lines = lines.filter(l => !((l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))); save(); }
             }
             lastG = g;
-        } else if(drag) {
-            cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y);
-        }
+        } else if(drag) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
         lastT = {x: t.clientX, y: t.clientY};
     }
     render();
@@ -175,37 +158,20 @@ cvs.addEventListener('touchend', e => {
     if(e.touches.length === 0) {
         if(isActionable && !pinch) {
             const g = toG(startT.x, startT.y);
-            if(mode === 'move') {
-                // まず、タップした場所に既存の建物があるか確認
-                const hitIdx = map.findLastIndex(d => { 
-                    const a = assets[d.aIdx]; 
-                    return g.x >= d.x && g.x < d.x+a.gw && g.y >= d.y && g.y < d.y+a.gh; 
-                });
+            const hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return g.x >= d.x && g.x < d.x+a.gw && g.y >= d.y && g.y < d.y+a.gh; });
 
+            if(mode === 'move') {
                 if(activeAsset !== -1) { 
                     const a = assets[activeAsset];
+                    // ★重要修正：設置位置（左上座標）を、タップしたマスが「右下角」になるよう計算
                     const nx = g.x-(a.gw-1), ny = g.y-(a.gh-1);
-                    
-                    // 重複チェック: 既存の建物がなく、かつスペースが空いている場合のみ設置
                     if(hitIdx === -1 && isSpaceEmpty(nx, ny, a.gw, a.gh)) {
                         const newObj = {id: Date.now(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO};
                         map.push(newObj); map.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
-                        selIdx = map.findIndex(d => d.id === newObj.id);
-                        save(); 
-                    } else if (hitIdx !== -1) {
-                        // すでに建物がある場所をタップしたなら、それを選択する
-                        selIdx = hitIdx;
-                    }
-                } else { 
-                    selIdx = hitIdx;
-                }
-            } else if(mode === 'erase') {
-                map = map.filter(d => { 
-                    const a = assets[d.aIdx]; 
-                    return !(g.x >= d.x && g.x < d.x+a.gw && g.y >= d.y && g.y < d.y+a.gh); 
-                }); 
-                selIdx = -1; save();
-            }
+                        selIdx = map.findIndex(d => d.id === newObj.id); save(); 
+                    } else if (hitIdx !== -1) { selIdx = hitIdx; }
+                } else { selIdx = hitIdx; }
+            } else if(mode === 'erase' && hitIdx !== -1) { map.splice(hitIdx, 1); selIdx = -1; save(); }
         }
         drag = pinch = isActionable = false; lastG = null;
     }
@@ -215,29 +181,15 @@ cvs.addEventListener('touchend', e => {
 function setMode(m) { mode = m; document.querySelectorAll('.mode-row button').forEach(b => b.classList.remove('active')); document.getElementById(`m-${m}`).classList.add('active'); }
 window.adjS = (v) => { if(selIdx!==-1){ map[selIdx].s += v; save(); render(); } };
 window.adjO = (v) => { if(selIdx!==-1){ map[selIdx].off += v; save(); render(); } };
-window.nudge = (dx,dy) => { 
-    if(selIdx!==-1){ 
-        const d = map[selIdx]; const a = assets[d.aIdx];
-        // 微調整時は重複チェックをスルーして移動可能（重なりを微調整したいため）
-        d.x += dx; d.y += dy; 
-        save(); render(); 
-    } 
-};
-
+window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; save(); render(); } };
 function addThumb(idx) { 
-    const d = document.createElement('div'); d.className = 'thumb'; 
-    d.style.backgroundImage = `url(${assets[idx].src})`; 
-    d.onclick = () => { 
-        selIdx = -1; activeAsset = idx; setMode('move'); 
-        document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); 
-        d.classList.add('selected'); render(); 
-    }; 
+    const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`; 
+    d.onclick = () => { selIdx = -1; activeAsset = idx; setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); render(); }; 
     document.getElementById('item-list').appendChild(d); 
 }
-
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function save() { localStorage.setItem('map_final_v11', JSON.stringify({m:map, l:lines})); }
-function load() { const s = localStorage.getItem('map_final_v11'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
+function save() { localStorage.setItem('map_final_v12', JSON.stringify({m:map, l:lines})); }
+function load() { const s = localStorage.getItem('map_final_v12'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
 function crop(img) { const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } const w = x2-x1+1, h = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h; c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
 function exportImage() { deselect(); render(); const link = document.createElement('a'); link.download = 'layout.png'; link.href = cvs.toDataURL(); link.click(); }
 window.clearAll = () => { if(confirm("全消去しますか？")){ localStorage.clear(); location.reload(); } };
