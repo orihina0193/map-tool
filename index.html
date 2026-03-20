@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.5.0</title>
+    <title>避難所レイアウト v27.6.0</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -115,7 +115,7 @@ window.handleFiles = (files) => {
             img.onload = () => {
                 const src = crop(img); const i2 = new Image();
                 i2.onload = () => {
-                    assets.push({ img: i2, src, defS: 1.6, defO: -2, dx: 0.5, dy: 0.5, gw: 1, gh: 1, name: f.name });
+                    assets.push({ img: i2, src, defS: 1.6, defO: -2, dx: 0, dy: 0, gw: 1, gh: 1, name: f.name });
                     addThumb(assets.length - 1);
                 };
                 i2.src = src;
@@ -146,13 +146,12 @@ function render() {
         const d = obj.data; const a = assets[d.aIdx]; if(!a || !a.img) return;
         const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
         
-        // 【修正】 anchor (描画の基準) をマスの手前（南端）に設定
+        // --- 修正箇所：マスの南端（d.x + a.gw, d.y + a.gh）を起点にする ---
         const anchor = toS(d.x + a.gw, d.y + a.gh);
         ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + d.off, w, h);
 
         if(selIdx === obj.originalIdx) {
             ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
-            // 青い枠も手前（S）から反時計回りに描画してズレを解消
             const pS = toS(d.x + a.gw, d.y + a.gh), pW = toS(d.x, d.y + a.gh), pE = toS(d.x + a.gw, d.y), pN = toS(d.x, d.y);
             ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke();
         }
@@ -198,7 +197,8 @@ cvs.addEventListener('touchend', e => {
         if(mode === 'move') {
             if(activeAsset !== -1) {
                 const a = assets[activeAsset];
-                map.push({x:Math.floor(g.x) + (a.dx % 1), y:Math.floor(g.y) + (a.dy % 1), aIdx:activeAsset, s:a.defS, off:a.defO});
+                // 配置時の初期座標も gw, gh を考慮して手前に来るように微調整
+                map.push({x:Math.floor(g.x) - (a.gw - 1), y:Math.floor(g.y) - (a.gh - 1), aIdx:activeAsset, s:a.defS, off:a.defO});
                 selIdx = map.length - 1; syncSliders();
             } else {
                 let h = map.findLastIndex(d => {
@@ -229,8 +229,8 @@ function addThumb(idx) {
     document.getElementById('item-list').appendChild(d);
 }
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function save() { localStorage.setItem('map_v46', JSON.stringify({m:map})); }
-function load() { const s = localStorage.getItem('map_v46'); if(s) { map = JSON.parse(s).m; } }
+function save() { localStorage.setItem('map_v47', JSON.stringify({m:map})); }
+function load() { const s = localStorage.getItem('map_v47'); if(s) { map = JSON.parse(s).m; } }
 function crop(img) {
     const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0);
     const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0;
