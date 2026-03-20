@@ -1,40 +1,41 @@
-<script>
-// ... (PRESETSなどはIkumiさんの最新設定を維持)
-
-function render() {
-    ctx.clearRect(0,0,cvs.width,cvs.height);
-    ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
-    
-    // グリッド描画
-    ctx.strokeStyle = "rgba(0,0,0,0.08)";
-    for(let i=-20; i<=40; i++){
-        let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
-        s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
-    }
-
-    let drawList = map.map((d, i) => ({ data: d, sort: d.x + d.y, originalIdx: i }));
-    drawList.sort((a, b) => a.sort - b.sort);
-
-    drawList.forEach(obj => {
-        const d = obj.data; const a = assets[d.aIdx]; if(!a || !a.img) return;
-        const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
-        
-        // --- 起点の修正：マスの「南端（手前）」を基準にする ---
-        const anchor = toS(d.x + a.gw, d.y + a.gh);
-        ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + d.off, w, h);
-
-        // 青い選択枠の描画（ここも起点に合わせる）
-        if(selIdx === obj.originalIdx) {
-            ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
-            const pS = toS(d.x + a.gw, d.y + a.gh), // 南 (手前)
-                  pW = toS(d.x, d.y + a.gh),       // 西 (左)
-                  pE = toS(d.x + a.gw, d.y),       // 東 (右)
-                  pN = toS(d.x, d.y);             // 北 (奥)
-            ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); 
-            ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke();
-        }
-    });
-    ctx.restore(); updateInfo();
-}
-// ... (以下略)
-</script>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>避難所レイアウト v27.5.0</title>
+    <style>
+        :root { --top-h: 75px; --bot-h: 245px; }
+        body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
+        canvas { display: block; background: #f0f0f0; }
+        #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        #item-list { display: flex; gap: 8px; align-items: center; }
+        .thumb { width: 50px; height: 50px; border-radius: 6px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; }
+        .thumb.selected { border-color: #007aff; border-width: 3px; box-shadow: 0 0 10px rgba(0,122,255,0.3); }
+        .deselect-btn { width: 50px; height: 50px; border-radius: 6px; border: 1px solid #ccc; background: #eee; color: #666; font-size: 10px; font-weight: bold; flex-shrink: 0; }
+        #upload-label { width: 50px; height: 50px; border: 2px dashed #bbb; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 20px; color: #999; flex-shrink: 0; background: #fff; cursor: pointer; }
+        #bot-panel { position: absolute; bottom: 0; width: 100%; height: var(--bot-h); background: rgba(255,255,255,0.98); border-top: 1px solid #ccc; padding: 12px; box-sizing: border-box; z-index: 100; display: flex; flex-direction: column; gap: 12px; }
+        .slider-section { display: flex; flex-direction: column; gap: 8px; }
+        .row { display: flex; align-items: center; gap: 6px; }
+        .row label { font-size: 11px; font-weight: bold; width: 35px; }
+        input[type="range"] { flex: 1; height: 32px; }
+        .prec-btn { width: 38px; height: 35px; font-size: 18px; border: 1px solid #ccc; background: #fff; border-radius: 6px; }
+        .tool-section { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        #nudge-grid { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(2, 40px); gap: 4px; }
+        #nudge-grid button { font-size: 20px; border: 1px solid #ccc; background: #fff; border-radius: 8px; }
+        .mode-box { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+        .mode-row { display: flex; gap: 4px; }
+        .mode-row button { flex: 1; height: 40px; font-size: 11px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
+        .mode-row button.active { background: #ff3b30; color: #fff; border-color: #c41e16; }
+        #m-move.active { background: #007aff; border-color: #004da3; }
+        #m-erase.active { background: #8e8e93; border-color: #636366; }
+        .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
+        .clear-btn { height: 32px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; font-weight: bold; }
+        #info-tag { position: absolute; top: 85px; left: 10px; background: rgba(0,122,255,0.9); color: #fff; padding: 10px; border-radius: 8px; font-size: 11px; z-index: 150; font-family: monospace; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2); cursor: pointer; -webkit-user-select: none; }
+        #copy-toast { position: fixed; top: 140px; left: 10px; background: #34c759; color: white; padding: 4px 10px; border-radius: 4px; font-size: 10px; z-index: 200; display: none; }
+    </style>
+</head>
+<body>
+<canvas id="cvs"></canvas>
+<div id="info-tag" onclick="copyInfo()"></div>
+<div
