@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.9.0</title>
+    <title>避難所レイアウト v23.0.1</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -30,12 +30,22 @@
         #m-move.active { background: #007aff; border-color: #004da3; }
         #m-erase.active { background: #8e8e93; border-color: #636366; }
         .clear-btn { height: 32px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; font-weight: bold; }
+        .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
         #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; z-index: 50; }
+        /* 保存オーバーレイ */
+        #save-overlap { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:200; display:none; flex-direction:column; align-items:center; justify-content:center; color:white; }
+        #save-overlap img { max-width:90%; max-height:70%; border:2px solid white; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
 <canvas id="cvs"></canvas>
 <div id="zoom-tag">Zoom: 100%</div>
+<div id="save-overlap" onclick="this.style.display='none'">
+    <p style="font-size:14px; margin-bottom:10px;">画像を長押しして保存</p>
+    <img id="out-img">
+    <p style="margin-top:15px; font-size:12px; opacity:0.7;">タップして戻る</p>
+</div>
+
 <div id="top-panel"><div id="item-list"><button class="deselect-btn" onclick="deselect()">選択<br>解除</button><label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple></label></div></div>
 <div id="bot-panel">
     <div class="slider-section">
@@ -45,6 +55,7 @@
     <div class="tool-section">
         <div id="nudge-grid"><span></span><button onclick="nudge(0,-0.1)">↑</button><span></span><button onclick="nudge(-0.1,0)">←</button><button onclick="nudge(0,0.1)">↓</button><button onclick="nudge(0.1,0)">→</button></div>
         <div class="mode-box">
+            <button class="save-btn" onclick="exportImage()">📷 画像として保存</button>
             <div class="mode-row"><button id="m-move">移動</button><button id="m-pen">ペン</button><button id="m-erase">消去</button></div>
             <button class="clear-btn" onclick="clearAll()">データリセット</button>
         </div>
@@ -66,14 +77,19 @@ const toG = (sx, sy) => {
     let gy = (y/(T_H/2) - x/(T_W/2))/2; return { x: x/(T_W/2) + gy, y: gy };
 };
 
-function render() {
+function render(isExport = false) {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
-    ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
-    for(let i=-20; i<=40; i++){
-        let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
-        s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
+    
+    // 保存用出力時はグリッドを消す
+    if(!isExport) {
+        ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
+        for(let i=-20; i<=40; i++){
+            let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
+            s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
+        }
     }
+
     let drawList = [];
     map.forEach((d, i) => drawList.push({ type: 'img', data: d, sort: d.x + d.s + d.y + d.s, originalIdx: i }));
     edgeLines.forEach((l, i) => drawList.push({ type: 'line', data: l, sort: Math.max(l.x1, l.x2) + Math.max(l.y1, l.y2), originalIdx: i }));
@@ -84,7 +100,8 @@ function render() {
             const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
             const anchor = toS(d.x + 1, d.y + 1);
             ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + (a.off || 0), w, h);
-            if(selIdx === obj.originalIdx) {
+            
+            if(!isExport && selIdx === obj.originalIdx) {
                 ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
                 let pS = anchor, pW = {x:anchor.x-(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pE = {x:anchor.x+(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pN = {x:anchor.x, y:anchor.y-T_H*d.s};
                 ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke();
@@ -95,6 +112,16 @@ function render() {
         }
     });
     ctx.restore();
+}
+
+// 保存用画像生成
+function exportImage() {
+    deselect(); 
+    render(true); // グリッドなしで描画
+    const dataUrl = cvs.toDataURL('image/png');
+    document.getElementById('out-img').src = dataUrl;
+    document.getElementById('save-overlap').style.display = 'flex';
+    render(); // 元のグリッド表示に戻す
 }
 
 cvs.addEventListener('touchstart', e => {
@@ -134,10 +161,8 @@ cvs.addEventListener('touchend', e => {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
             if(activeAsset !== -1) {
-                // ここでデータを追加
                 map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
                 selIdx = map.length - 1;
-                // ★重要：即座に描画を実行！
                 render(); 
             } else {
                 let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
@@ -217,7 +242,7 @@ function addThumb(idx) {
         d.classList.add('selected');
         activeAsset = idx;
         selIdx = -1;
-        render(); // サムネイル選択時も即描画
+        render(); 
     };
     const list = document.getElementById('item-list');
     const uLabel = document.getElementById('upload-label');
