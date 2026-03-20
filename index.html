@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.9.3</title>
+    <title>避難所レイアウト v27.9.4</title>
     <style>
         :root { --top-h: 75px; --bot-h: 260px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -71,7 +71,7 @@ const cvs = document.getElementById('cvs'); const ctx = cvs.getContext('2d');
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], lines = [], selIdx = -1, activeAsset = -1, mode = 'move';
-let drag = false, pinch = false, isActionable = false;
+let drag = false, pinch = false, isDraggingObj = false;
 let startT = {x: 0, y: 0}, lastT = {x: 0, y: 0}, lastG = null, lastDist = 0;
 
 function init() {
@@ -122,8 +122,9 @@ function render() {
     ctx.restore();
 }
 
-function isSpaceEmpty(gx, gy, gw, gh) {
-    return !map.some(d => {
+function isSpaceEmpty(gx, gy, gw, gh, ignoreIdx = -1) {
+    return !map.some((d, idx) => {
+        if(idx === ignoreIdx) return false;
         const a = assets[d.aIdx];
         return !(gx + gw <= d.x || gx >= d.x + a.gw || gy + gh <= d.y || gy >= d.y + a.gh);
     });
@@ -131,40 +132,71 @@ function isSpaceEmpty(gx, gy, gw, gh) {
 
 cvs.addEventListener('touchstart', e => {
     if(e.touches.length >= 2) { 
-        pinch = true; drag = false; isActionable = false; 
+        pinch = true; drag = false; isDraggingObj = false; 
         lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); 
         return; 
     }
-    const t = e.touches[0]; startT = {x: t.clientX, y: t.clientY}; lastT = {x: t.clientX, y: t.clientY}; isActionable = true; drag = true;
+    const t = e.touches[0]; startT = {x: t.clientX, y: t.clientY}; lastT = {x: t.clientX, y: t.clientY};
+    const g = toG(t.clientX, t.clientY);
+    
+    // ヒット判定
+    const hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return g.x >= d.x && g.x < d.x+a.gw && g.y >= d.y && g.y < d.y+a.gh; });
+
+    if(mode === 'move') {
+        if(activeAsset !== -1) {
+            const a = assets[activeAsset];
+            const nx = g.x-(a.gw-1), ny = g.y-(a.gh-1);
+            if(hitIdx === -1 && isSpaceEmpty(nx, ny, a.gw, a.gh)) {
+                const newObj = {id: Date.now(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO};
+                map.push(newObj); map.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
+                selIdx = map.findIndex(d => d.id === newObj.id);
+                isDraggingObj = true; // そのままドラッグモードへ
+                save();
+            } else if(hitIdx !== -1) {
+                selIdx = hitIdx; isDraggingObj = true;
+            }
+        } else if(hitIdx !== -1) {
+            selIdx = hitIdx; isDraggingObj = true;
+        } else {
+            drag = true; // 何もないところならカメラ移動
+        }
+    } else if(mode === 'erase' && hitIdx !== -1) {
+        map.splice(hitIdx, 1); selIdx = -1; save();
+    }
+    render();
 }, {passive: false});
 
 cvs.addEventListener('touchmove', e => {
     e.preventDefault();
     if(pinch && e.touches.length >= 2) {
-        // ★ズームの起点（2指の中点）を計算
         const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
         const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        
         const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         const zoomFactor = dist / lastDist;
-        
-        // ★中点を基準にしたスケーリング計算
-        const oldZ = cam.z;
         cam.z *= zoomFactor;
         cam.x = midX - (midX - cam.x) * zoomFactor;
         cam.y = midY - (midY - cam.y) * zoomFactor;
-        
         lastDist = dist;
     } else if(!pinch) {
-        const t = e.touches[0]; if(Math.hypot(t.clientX - startT.x, t.clientY - startT.y) > 10) isActionable = false;
-        if(mode === 'pen' || mode === 'p-erase') {
-            const g = toG(t.clientX, t.clientY);
+        const t = e.touches[0];
+        const g = toG(t.clientX, t.clientY);
+
+        if(isDraggingObj && selIdx !== -1) {
+            const d = map[selIdx]; const a = assets[d.aIdx];
+            const nx = g.x-(a.gw-1), ny = g.y-(a.gh-1);
+            // 移動先が空いていれば更新
+            if(isSpaceEmpty(nx, ny, a.gw, a.gh, selIdx)) {
+                d.x = nx; d.y = ny; save();
+            }
+        } else if(mode === 'pen' || mode === 'p-erase') {
             if(lastG && (g.x !== lastG.x || g.y !== lastG.y)) {
                 if(mode === 'pen') { if(!lines.some(l => (l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))) { lines.push({x1: lastG.x, y1: lastG.y, x2: g.x, y2: g.y}); save(); } }
                 else { lines = lines.filter(l => !((l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))); save(); }
             }
             lastG = g;
-        } else if(drag) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
+        } else if(drag) {
+            cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y);
+        }
         lastT = {x: t.clientX, y: t.clientY};
     }
     render();
@@ -172,22 +204,8 @@ cvs.addEventListener('touchmove', e => {
 
 cvs.addEventListener('touchend', e => {
     if(e.touches.length === 0) {
-        if(isActionable && !pinch) {
-            const g = toG(startT.x, startT.y);
-            const hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return g.x >= d.x && g.x < d.x+a.gw && g.y >= d.y && g.y < d.y+a.gh; });
-            if(mode === 'move') {
-                if(activeAsset !== -1) { 
-                    const a = assets[activeAsset];
-                    const nx = g.x-(a.gw-1), ny = g.y-(a.gh-1);
-                    if(hitIdx === -1 && isSpaceEmpty(nx, ny, a.gw, a.gh)) {
-                        const newObj = {id: Date.now(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO};
-                        map.push(newObj); map.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
-                        selIdx = map.findIndex(d => d.id === newObj.id); save(); 
-                    } else if (hitIdx !== -1) { selIdx = hitIdx; }
-                } else { selIdx = hitIdx; }
-            } else if(mode === 'erase' && hitIdx !== -1) { map.splice(hitIdx, 1); selIdx = -1; save(); }
-        }
-        drag = pinch = isActionable = false; lastG = null;
+        drag = pinch = isDraggingObj = false; lastG = null;
+        map.sort((a,b)=>(a.x+a.y)-(b.x+b.y)); // 重なり順を最終確定
     }
     render();
 });
