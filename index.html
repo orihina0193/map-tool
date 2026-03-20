@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v28.0.4</title>
+    <title>避難所レイアウト v28.0.5</title>
     <style>
-        :root { --top-h: 75px; --bot-h: 260px; }
+        :root { --top-h: 75px; --bot-h: 300px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
         canvas { display: block; background: #f0f0f0; }
         #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -15,52 +15,52 @@
         .deselect-btn { width: 50px; height: 50px; border-radius: 6px; border: 1px solid #ccc; background: #eee; color: #666; font-size: 10px; font-weight: bold; flex-shrink: 0; }
         #upload-label { width: 50px; height: 50px; border: 2px dashed #bbb; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 20px; color: #999; flex-shrink: 0; background: #fff; }
         #bot-panel { position: absolute; bottom: 0; width: 100%; height: var(--bot-h); background: rgba(255,255,255,0.98); border-top: 1px solid #ccc; padding: 10px; box-sizing: border-box; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
-        .slider-section { display: flex; flex-direction: column; gap: 4px; }
         .row { display: flex; align-items: center; gap: 6px; }
         .row label { font-size: 11px; font-weight: bold; width: 35px; }
         input[type="range"] { flex: 1; height: 32px; }
         .prec-btn { width: 38px; height: 35px; font-size: 18px; border: 1px solid #ccc; background: #fff; border-radius: 6px; }
         .tool-section { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-        #nudge-grid { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(2, 40px); gap: 4px; }
+        #nudge-grid { display: grid; grid-template-columns: repeat(3, 40px); gap: 4px; }
         #nudge-grid button { font-size: 20px; border: 1px solid #ccc; background: #fff; border-radius: 8px; }
-        .mode-box { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+        .mode-box { flex: 1; display: flex; flex-direction: column; gap: 6px; }
         .mode-row { display: flex; gap: 4px; flex-wrap: wrap; }
-        .mode-row button { flex: 1; min-width: 50px; height: 40px; font-size: 11px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
-        .mode-row button.active { background: #007aff; color: #fff; border-color: #004da3; }
-        .mode-row button.active.erase-mode { background: #ff3b30; border-color: #c41e16; }
-        .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; }
-        .clear-btn { height: 30px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; }
+        .mode-row button { flex: 1; min-width: 50px; height: 36px; font-size: 10px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
+        .mode-row button.active { background: #007aff; color: #fff; }
+        .data-row { display: flex; gap: 4px; }
+        .data-btn { flex: 1; height: 36px; font-size: 11px; font-weight: bold; border-radius: 8px; border: none; color: white; }
+        .btn-out { background: #5856d6; }
+        .btn-in { background: #ff9500; }
+        .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
         #export-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        #export-img { max-width: 90%; max-height: 75%; border: 2px solid #fff; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        #export-overlay p { color: white; margin-top: 15px; font-size: 14px; font-weight: bold; text-align: center; }
+        #export-img { max-width: 90%; max-height: 75%; border: 2px solid #fff; border-radius: 8px; }
     </style>
 </head>
 <body>
 <canvas id="cvs"></canvas>
 <div id="top-panel"><div id="item-list"><button class="deselect-btn" onclick="deselect()">選択<br>解除</button><label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple onchange="handleFiles(this.files)"></label></div></div>
 <div id="bot-panel">
-    <div class="slider-section">
-        <div class="row"><label>サイズ</label><button class="prec-btn" onclick="adjS(-0.05)">-</button><input type="range" id="size-s" min="0.1" max="5" step="0.05"><button class="prec-btn" onclick="adjS(0.05)">+</button></div>
-        <div class="row"><label>接地</label><button class="prec-btn" onclick="adjO(-1)">-</button><input type="range" id="off-s" min="-100" max="100" step="1"><button class="prec-btn" onclick="adjO(1)">+</button></div>
-    </div>
+    <div class="row"><label>サイズ</label><button class="prec-btn" onclick="adjS(-0.05)">-</button><input type="range" id="size-s" min="0.1" max="5" step="0.05"><button class="prec-btn" onclick="adjS(0.05)">+</button></div>
+    <div class="row"><label>接地</label><button class="prec-btn" onclick="adjO(-1)">-</button><input type="range" id="off-s" min="-100" max="100" step="1"><button class="prec-btn" onclick="adjO(1)">+</button></div>
     <div class="tool-section">
-        <div id="nudge-grid"><span></span><button onclick="nudge(0,-0.1)">↑</button><span></span><button onclick="nudge(-0.1,0)">←</button><button onclick="nudge(0,0.1)">↓</button><button onclick="nudge(0.1,0)">→</button></div>
+        <div id="nudge-grid"><span></span><button onclick="nudge(0,-1)">↑</button><span></span><button onclick="nudge(-1,0)">←</button><button onclick="nudge(0,1)">↓</button><button onclick="nudge(1,0)">→</button></div>
         <div class="mode-box">
             <button class="save-btn" onclick="exportImage()">画像として保存</button>
+            <div class="data-row">
+                <button class="data-btn btn-out" onclick="exportData()">データ出力</button>
+                <button class="data-btn btn-in" onclick="importData()">データ読込</button>
+            </div>
             <div class="mode-row">
                 <button id="m-move" onclick="setMode('move')">移動</button>
                 <button id="m-pen" onclick="setMode('pen')">ペン</button>
                 <button id="m-p-erase" onclick="setMode('p-erase')">ペン消し</button>
-                <button id="m-erase" onclick="setMode('erase')" class="erase-mode">建物消去</button>
+                <button id="m-erase" onclick="setMode('erase')">消去</button>
             </div>
-            <button class="clear-btn" onclick="clearAll()">リセット</button>
         </div>
     </div>
 </div>
-<div id="export-overlay" onclick="this.style.display='none'"><img id="export-img" src=""><p>画像を長押しして保存してください</p></div>
+<div id="export-overlay" onclick="this.style.display='none'"><img id="export-img" src=""><p style="color:white;text-align:center;">長押しで保存</p></div>
 
 <script>
-// ★PRESETSの黄金オフセット比率はそのまま維持
 const PRESETS = [
     { name: "HQ", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.6, o: 1, gw: 2, gh: 2, ox: -0.1, oy: -0.2 },
     { name: "DOOM", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.6, o: -3, gw: 2, gh: 2, ox: -0.2, oy: 0 },
@@ -99,40 +99,27 @@ const toG = (sx, sy) => {
     let x = (sx - cam.x)/cam.z, y = (sy - cam.y)/cam.z;
     let gy = (y/(T_H/2) - x/(T_W/2))/2; return { x: x/(T_W/2) + gy, y: gy };
 };
-const getNearestCross = (gx, gy) => ({ x: Math.round(gx), y: Math.round(gy) });
 
 function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
-    
-    // グリッド
     ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1/cam.z;
     for(let i=-20; i<=40; i++){
         let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
-    
-    // ペン画
     lines.forEach(l => {
         ctx.beginPath(); ctx.strokeStyle = "rgba(255,0,0,0.6)"; ctx.lineWidth = 4/cam.z;
         const s = toS(l.x1, l.y1), e = toS(l.x2, l.y2); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
     });
-
-    if(mode === 'pen' && penStart) { const p = toS(penStart.x, penStart.y); ctx.fillStyle = "red"; ctx.beginPath(); ctx.arc(p.x, p.y, 4/cam.z, 0, Math.PI*2); ctx.fill(); }
-    
-    // 建物（ソートして描画）
     map.sort((a,b)=>(Math.round(a.x)+Math.round(a.y))-(Math.round(b.x)+Math.round(b.y))).forEach((d, i) => {
         const a = assets[d.aIdx]; if(!a) return;
         const w = T_W * d.s, h = (a.img.height/a.img.width) * w; 
-        
-        // ★描画位置の計算：建物画像のみに ox, oy を適用
         const anchor = toS(d.x + a.gw + a.ox, d.y + a.gh + a.oy);
         ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + d.off, w, h);
-        
-        // ★青い線の描画： ox, oy を適用せず、きっちり整数グリッドに合わせる
         if(selIdx === i) { 
             ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2/cam.z; 
-            const gx = Math.round(d.x), gy = Math.round(d.y); // 整数化
+            const gx = Math.round(d.x), gy = Math.round(d.y);
             const pS = toS(gx+a.gw, gy+a.gh), pW = toS(gx, gy+a.gh), pE = toS(gx+a.gw, gy), pN = toS(gx, gy); 
             ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke(); 
         }
@@ -143,26 +130,18 @@ function render() {
 cvs.addEventListener('touchstart', e => {
     if(e.touches.length >= 2) { pinch = true; drag = false; lockedTarget = -1; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); return; }
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
-    const rawG = toG(t.clientX, t.clientY); const crossG = getNearestCross(rawG.x, rawG.y);
-    
+    const rawG = toG(t.clientX, t.clientY); const crossG = { x: Math.round(rawG.x), y: Math.round(rawG.y) };
     if(mode === 'pen') { if(!penStart) { penStart = crossG; } else { if(penStart.x !== crossG.x || penStart.y !== crossG.y) { lines.push({x1: penStart.x, y1: penStart.y, x2: crossG.x, y2: crossG.y}); save(); } penStart = null; } }
     else if(mode === 'p-erase') { lines = lines.filter(l => { const mx = (l.x1 + l.x2) / 2, my = (l.y1 + l.y2) / 2; return Math.hypot(mx - rawG.x, my - rawG.y) > 0.4; }); save(); }
     else if(mode === 'move' || mode === 'erase') {
-        const gridPos = {x: Math.round(rawG.x), y: Math.round(rawG.y)};
-        // ★判定も ox, oy を含めず整数グリッドで行う
-        const hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return gridPos.x >= Math.round(d.x) && gridPos.x < Math.round(d.x)+a.gw && gridPos.y >= Math.round(d.y) && gridPos.y < Math.round(d.y)+a.gh; });
-        
+        const hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return crossG.x >= Math.round(d.x) && crossG.x < Math.round(d.x)+a.gw && crossG.y >= Math.round(d.y) && crossG.y < Math.round(d.y)+a.gh; });
         if(mode === 'erase' && hitIdx !== -1) { map.splice(hitIdx, 1); selIdx = -1; save(); }
         else if(mode === 'move') { 
             if(hitIdx !== -1) { selIdx = hitIdx; lockedTarget = map[selIdx].id; } 
             else if(activeAsset !== -1) { 
-                const a = assets[activeAsset]; 
-                // 設置座標は整数グリッド（画像描画時にox,oyを足す）
-                const nx = Math.round(rawG.x - (a.gw-1));
-                const ny = Math.round(rawG.y - (a.gh-1));
+                const a = assets[activeAsset]; const nx = Math.round(rawG.x - (a.gw-1)), ny = Math.round(rawG.y - (a.gh-1));
                 const newObj = {id: Date.now(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO}; 
-                map.push(newObj); map.sort((a,b)=>(Math.round(a.x)+Math.round(a.y))-(Math.round(b.x)+Math.round(b.y)));
-                selIdx = map.findIndex(d => d.id === newObj.id); lockedTarget = newObj.id; save(); 
+                map.push(newObj); selIdx = map.length - 1; lockedTarget = newObj.id; save(); 
             } else { drag = true; } 
         }
     }
@@ -172,40 +151,49 @@ cvs.addEventListener('touchstart', e => {
 cvs.addEventListener('touchmove', e => {
     e.preventDefault();
     if(pinch && e.touches.length >= 2) {
-        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2, midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-        const zoomFactor = dist / lastDist; cam.z *= zoomFactor; cam.x = midX - (midX - cam.x) * zoomFactor; cam.y = midY - (midY - cam.y) * zoomFactor; lastDist = dist;
+        const zoomFactor = dist / lastDist; cam.z *= zoomFactor; lastDist = dist;
     } else if(!pinch && mode === 'move') {
         const t = e.touches[0]; const rawG = toG(t.clientX, t.clientY);
         if(lockedTarget !== -1) { 
             const idx = map.findIndex(d => d.id === lockedTarget); 
-            if(idx !== -1) { 
-                const d = map[idx]; const a = assets[d.aIdx]; 
-                // 移動座標は整数グリッド
-                d.x = Math.round(rawG.x - (a.gw-1));
-                d.y = Math.round(rawG.y - (a.gh-1));
-                save(); 
-            } 
-        }
-        else if(drag) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
+            if(idx !== -1) { const d = map[idx]; const a = assets[d.aIdx]; d.x = Math.round(rawG.x - (a.gw-1)); d.y = Math.round(rawG.y - (a.gh-1)); save(); } 
+        } else if(drag) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
         lastT = {x: t.clientX, y: t.clientY};
     }
     render();
 }, {passive: false});
 
-cvs.addEventListener('touchend', e => { if(e.touches.length === 0) { drag = pinch = false; lockedTarget = -1; } render(); });
-function setMode(m) { mode = m; penStart = null; document.querySelectorAll('.mode-row button').forEach(b => b.classList.remove('active')); document.getElementById(`m-${m}`).classList.add('active'); render(); }
+cvs.addEventListener('touchend', () => { drag = pinch = false; lockedTarget = -1; render(); });
+
+// ★データ管理機能
+function exportData() {
+    const data = JSON.stringify({m: map, l: lines});
+    const encoded = btoa(unescape(encodeURIComponent(data))); // 簡易的な圧縮(Base64)
+    prompt("【データ出力】このコードをコピーして保存してください", encoded);
+}
+function importData() {
+    const code = prompt("【データ読込】保存したコードを貼り付けてください");
+    if(!code) return;
+    try {
+        const decoded = decodeURIComponent(escape(atob(code)));
+        const d = JSON.parse(decoded);
+        map = d.m || []; lines = d.l || [];
+        save(); render();
+        alert("読み込み完了！");
+    } catch(e) { alert("無効なコードです"); }
+}
+
+function setMode(m) { mode = m; document.querySelectorAll('.mode-row button').forEach(b => b.classList.remove('active')); document.getElementById(`m-${m}`).classList.add('active'); render(); }
 window.adjS = (v) => { if(selIdx!==-1){ map[selIdx].s = parseFloat((map[selIdx].s + v).toFixed(2)); save(); render(); } };
 window.adjO = (v) => { if(selIdx!==-1){ map[selIdx].off += v; save(); render(); } };
-// ★ナッジ単位をグリッド単位に変更（0.1マス単位での微調整は画像側で吸収するため、ここでは整数単位で動かす）
 window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x += dx; map[selIdx].y += dy; save(); render(); } };
-function addThumb(idx) { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`; d.onclick = () => { selIdx = -1; activeAsset = idx; setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); render(); }; document.getElementById('item-list').appendChild(d); }
-window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function save() { localStorage.setItem('map_v19', JSON.stringify({m:map, l:lines})); }
-function load() { const s = localStorage.getItem('map_v19'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
+function addThumb(idx) { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`; d.onclick = () => { activeAsset = idx; setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); render(); }; document.getElementById('item-list').appendChild(d); }
+function deselect() { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); }
+function save() { localStorage.setItem('map_v20', JSON.stringify({m:map, l:lines})); }
+function load() { const s = localStorage.getItem('map_v20'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
 function crop(img) { const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } const w = x2-x1+1, h = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h; c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
 function exportImage() { deselect(); render(); const dataUrl = cvs.toDataURL("image/png"); const overlay = document.getElementById('export-overlay'); const img = document.getElementById('export-img'); img.src = dataUrl; overlay.style.display = 'flex'; }
-window.clearAll = () => { if(confirm("全消去しますか？")){ localStorage.clear(); location.reload(); } };
 init();
 </script>
 </body>
