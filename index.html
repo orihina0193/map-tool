@@ -1,4 +1,70 @@
-// --- プリセット設定エリア ---
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>避難所レイアウト v25.0.1</title>
+    <style>
+        :root { --top-h: 75px; --bot-h: 245px; }
+        body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
+        canvas { display: block; background: #f0f0f0; }
+        #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        #item-list { display: flex; gap: 8px; align-items: center; }
+        .thumb { width: 50px; height: 50px; border-radius: 6px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; }
+        .thumb.selected { border-color: #007aff; border-width: 3px; box-shadow: 0 0 10px rgba(0,122,255,0.3); }
+        .deselect-btn { width: 50px; height: 50px; border-radius: 6px; border: 1px solid #ccc; background: #eee; color: #666; font-size: 10px; font-weight: bold; flex-shrink: 0; }
+        #upload-label { width: 50px; height: 50px; border: 2px dashed #bbb; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 20px; color: #999; flex-shrink: 0; background: #fff; }
+        #bot-panel { position: absolute; bottom: 0; width: 100%; height: var(--bot-h); background: rgba(255,255,255,0.98); border-top: 1px solid #ccc; padding: 12px; box-sizing: border-box; z-index: 100; display: flex; flex-direction: column; gap: 12px; }
+        .slider-section { display: flex; flex-direction: column; gap: 8px; }
+        .row { display: flex; align-items: center; gap: 6px; }
+        .row label { font-size: 11px; font-weight: bold; width: 35px; }
+        input[type="range"] { flex: 1; height: 32px; }
+        .prec-btn { width: 38px; height: 35px; font-size: 18px; border: 1px solid #ccc; background: #fff; border-radius: 6px; }
+        .tool-section { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        #nudge-grid { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(2, 40px); gap: 4px; }
+        #nudge-grid button { font-size: 20px; border: 1px solid #ccc; background: #fff; border-radius: 8px; }
+        .mode-box { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+        .mode-row { display: flex; gap: 4px; }
+        .mode-row button { flex: 1; height: 40px; font-size: 11px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
+        .mode-row button.active { background: #ff3b30; color: #fff; border-color: #c41e16; }
+        #m-move.active { background: #007aff; border-color: #004da3; }
+        #m-erase.active { background: #8e8e93; border-color: #636366; }
+        .clear-btn { height: 32px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; font-weight: bold; }
+        .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
+        #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; z-index: 50; }
+        #save-overlap { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:200; display:none; flex-direction:column; align-items:center; justify-content:center; color:white; }
+        #save-overlap img { max-width:90%; max-height:70%; border:2px solid white; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body>
+<canvas id="cvs"></canvas>
+<div id="zoom-tag">Zoom: 100%</div>
+<div id="save-overlap" onclick="this.style.display='none'"><p style="font-size:14px; margin-bottom:10px;">画像を長押しして保存</p><img id="out-img"><p style="margin-top:15px; font-size:12px; opacity:0.7;">タップして戻る</p></div>
+
+<div id="top-panel">
+    <div id="item-list">
+        <button class="deselect-btn" onclick="deselect()">選択<br>解除</button>
+        <label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple></label>
+    </div>
+</div>
+
+<div id="bot-panel">
+    <div class="slider-section">
+        <div class="row"><label>サイズ</label><button class="prec-btn" onclick="adjS(-0.1)">-</button><input type="range" id="size-s" min="0.1" max="10" step="0.1" value="1"><button class="prec-btn" onclick="adjS(0.1)">+</button></div>
+        <div class="row"><label>接地</label><button class="prec-btn" onclick="adjO(-1)">-</button><input type="range" id="off-s" min="-100" max="100" step="1" value="0"><button class="prec-btn" onclick="adjO(1)">+</button></div>
+    </div>
+    <div class="tool-section">
+        <div id="nudge-grid"><span></span><button onclick="nudge(0,-0.1)">↑</button><span></span><button onclick="nudge(-0.1,0)">←</button><button onclick="nudge(0,0.1)">↓</button><button onclick="nudge(0.1,0)">→</button></div>
+        <div class="mode-box">
+            <button class="save-btn" onclick="exportImage()">画像として保存</button>
+            <div class="mode-row"><button id="m-move">移動</button><button id="m-pen">ペン</button><button id="m-erase">消去</button></div>
+            <button class="clear-btn" onclick="clearAll()">データリセット</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- プリセット設定エリア (Ikumi様カスタマイズ版) ---
 const PRESETS = [
     { name: "本部", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.6, o: 15, x: 0 }, 
     { name: "要塞", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.6, o: 12, x: -1 },
@@ -8,5 +74,204 @@ const PRESETS = [
     { name: "倉庫", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/SRG.png", s: 1.7, o: -3, x: -1 },
     { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 1.6, o: -3, x: 0 },
     { name: "岩1", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK1.png", s: 0.8, o: 7, x: 0 },
-    { name: "岩2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 0.8, o: 1, x: -7 } // 接地+1, 位置左7(-7)
+    { name: "岩2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 0.8, o: 1, x: -7 }
 ];
+// ----------------------------
+
+const cvs = document.getElementById('cvs'); const ctx = cvs.getContext('2d');
+const sizeS = document.getElementById('size-s'); const offS = document.getElementById('off-s');
+const T_W = 64, T_H = 32;
+let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
+let assets = [], map = [], edgeLines = [], selIdx = -1, activeAsset = -1, mode = 'move';
+let drag = false, pinch = false, lastDist = 0, lastMid = {x:0, y:0}, lastT = {x:0, y:0}, hasMoved = false, isClickReady = false;
+
+function init() {
+    cvs.width = window.innerWidth; cvs.height = window.innerHeight;
+    loadPresets().then(() => { load(); render(); });
+    setMode('move');
+}
+
+async function loadPresets() {
+    for (const p of PRESETS) {
+        await new Promise(resolve => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                const src = crop(img);
+                const i2 = new Image();
+                i2.onload = () => {
+                    assets.push({ img: i2, src, defS: p.s, defO: p.o, defX: p.x||0, url: p.url });
+                    addThumb(assets.length - 1);
+                    resolve();
+                };
+                i2.src = src;
+            };
+            img.onerror = () => resolve();
+            img.src = p.url;
+        });
+    }
+}
+
+const toS = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
+const toG = (sx, sy) => {
+    let x = (sx - cam.x)/cam.z, y = (sy - cam.y)/cam.z;
+    let gy = (y/(T_H/2) - x/(T_W/2))/2; return { x: x/(T_W/2) + gy, y: gy };
+};
+
+function render(isExport = false) {
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+    ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
+    if(!isExport) {
+        ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
+        for(let i=-20; i<=40; i++){
+            let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
+            s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
+        }
+    }
+    let drawList = [];
+    map.forEach((d, i) => drawList.push({ type: 'img', data: d, sort: d.x + d.y, originalIdx: i }));
+    edgeLines.forEach((l, i) => drawList.push({ type: 'line', data: l, sort: Math.max(l.x1, l.x2) + Math.max(l.y1, l.y2), originalIdx: i }));
+    drawList.sort((a, b) => a.sort - b.sort);
+    drawList.forEach(obj => {
+        if(obj.type === 'img') {
+            const d = obj.data; const a = assets[d.aIdx]; if(!a || !a.img) return;
+            const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
+            const anchor = toS(d.x + 1, d.y + 1);
+            ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + (d.off || 0), w, h);
+            if(!isExport && selIdx === obj.originalIdx) {
+                ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
+                let pS = anchor, pW = {x:anchor.x-(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pE = {x:anchor.x+(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pN = {x:anchor.x, y:anchor.y-T_H*d.s};
+                ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke();
+            }
+        } else {
+            const l = obj.data; ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 3; ctx.lineCap = "round";
+            let p1 = toS(l.x1, l.y1), p2 = toS(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+        }
+    });
+    ctx.restore();
+}
+
+function exportImage() { deselect(); render(true); document.getElementById('out-img').src = cvs.toDataURL('image/png'); document.getElementById('save-overlap').style.display = 'flex'; render(); }
+
+cvs.addEventListener('touchstart', e => {
+    hasMoved = false; isClickReady = true; const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
+    if(e.touches.length >= 2) { pinch = true; drag = false; isClickReady = false;
+        lastDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+        lastMid = {x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
+        return;
+    }
+    drag = true;
+}, {passive: false});
+
+cvs.addEventListener('touchmove', e => {
+    e.preventDefault(); const t = e.touches[0];
+    const moveDist = Math.hypot(t.clientX - lastT.x, t.clientY - lastT.y);
+    if(moveDist > 5) { hasMoved = true; isClickReady = false; }
+    if(pinch && e.touches.length >= 2) {
+        let d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+        let m = {x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
+        let f = d / lastDist; cam.x = m.x - (m.x - cam.x)*f + (m.x - lastMid.x); cam.y = m.y - (m.y - cam.y)*f + (m.y - lastMid.y);
+        cam.z *= f; lastDist = d; lastMid = m; document.getElementById('zoom-tag').innerText = "Zoom: "+Math.round(cam.z*100)+"%";
+    } else if(drag) {
+        if(mode === 'move' && activeAsset === -1) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
+    }
+    lastT = {x: t.clientX, y: t.clientY}; render();
+}, {passive: false});
+
+cvs.addEventListener('touchend', e => {
+    if(!pinch && isClickReady && !hasMoved) {
+        const g = toG(lastT.x, lastT.y);
+        if(mode === 'move') {
+            if(activeAsset !== -1) {
+                const a = assets[activeAsset];
+                map.push({x:Math.floor(g.x + (a.defX||0)), y:Math.floor(g.y), aIdx:activeAsset, s:a.defS, off:a.defO});
+                selIdx = map.length - 1; syncSliders();
+            } else {
+                let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
+                if(h !== -1) { selIdx = h; syncSliders(); }
+                else { selIdx = -1; syncSliders(); }
+            }
+        } else if(mode === 'erase') {
+            let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
+            if(h !== -1) map.splice(h, 1);
+        }
+    }
+    drag = pinch = isClickReady = false; save(); render();
+});
+
+function syncSliders() {
+    if(selIdx !== -1) { sizeS.value = map[selIdx].s; offS.value = map[selIdx].off; }
+    else if(activeAsset !== -1) { sizeS.value = assets[activeAsset].defS; offS.value = assets[activeAsset].defO; }
+    else { sizeS.value = 1; offS.value = 0; }
+}
+
+window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); syncSliders(); render(); };
+function setMode(m) { mode = m; selIdx = -1; if(m!=='move') activeAsset = -1; ['m-move','m-pen','m-erase'].forEach(id => document.getElementById(id).className = id===`m-${m}`?'active':''); render(); }
+document.getElementById('m-move').onclick = () => setMode('move');
+document.getElementById('m-pen').onclick = () => setMode('pen');
+document.getElementById('m-erase').onclick = () => setMode('erase');
+
+document.getElementById('img-in').onchange = (e) => {
+    for(let f of e.target.files) {
+        const r = new FileReader(); r.onload = (ev) => {
+            const i = new Image(); i.onload = () => {
+                const src = crop(i); const i2 = new Image();
+                i2.onload = () => { assets.push({img:i2, src, defS:1, defO:0, defX:0}); addThumb(assets.length-1); save(); }; i2.src = src;
+            }; i.src = ev.target.result;
+        }; r.readAsDataURL(f);
+    }
+};
+
+function crop(img) {
+    const c = document.createElement('canvas'); const t = c.getContext('2d');
+    c.width = img.width; c.height = img.height; t.drawImage(img,0,0);
+    const d = t.getImageData(0,0,c.width,c.height).data;
+    let x1=c.width, y1=c.height, x2=0, y2=0;
+    for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); }
+    const w = x2-x1+1, h = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h;
+    c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL();
+}
+
+function addThumb(idx) {
+    const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`;
+    d.onclick = () => { setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); activeAsset=idx; syncSliders(); render(); };
+    document.getElementById('item-list').appendChild(d);
+}
+
+function save() { localStorage.setItem('map_v40', JSON.stringify({m:map, el:edgeLines, a:assets.filter(a=>!PRESETS.some(p=>p.url===a.url)).map(a=>({src:a.src, defS:a.defS, defO:a.defO, defX:a.defX}))})); }
+function load() {
+    const s = localStorage.getItem('map_v40'); if(!s) return;
+    const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
+    d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets.push({img, src:ad.src, defS:ad.defS||1, defO:ad.defO||0, defX:ad.defX||0}); addThumb(assets.length-1); render(); }; img.src = ad.src; });
+}
+
+window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; render(); save(); } };
+window.adjS = (v) => { 
+    let val = parseFloat(sizeS.value)+v; val=Math.max(0.1,Math.min(10,val)); sizeS.value=val.toFixed(1); 
+    if(selIdx!==-1) map[selIdx].s=parseFloat(val); 
+    if(activeAsset!==-1) assets[activeAsset].defS=parseFloat(val);
+    save(); render(); 
+};
+window.adjO = (v) => { 
+    let val = parseInt(offS.value)+v; offS.value=val; 
+    if(selIdx!==-1) map[selIdx].off=val; 
+    if(activeAsset!==-1) assets[activeAsset].defO=val;
+    save(); render(); 
+};
+sizeS.oninput = () => { 
+    const val = parseFloat(sizeS.value);
+    if(selIdx!==-1) map[selIdx].s=val; 
+    if(activeAsset!==-1) assets[activeAsset].defS=val;
+    save(); render(); 
+};
+offS.oninput = () => { 
+    const val = parseInt(offS.value);
+    if(selIdx!==-1) map[selIdx].off=val; 
+    if(activeAsset!==-1) assets[activeAsset].defO=val;
+    save(); render(); 
+};
+window.clearAll = () => { if(confirm("消去しますか？")){ localStorage.clear(); location.reload(); } };
+init();
+</script>
+</body>
+</html>
