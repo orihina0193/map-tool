@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.7.9</title>
+    <title>避難所レイアウト v27.8.0</title>
     <style>
         :root { --top-h: 75px; --bot-h: 260px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -30,15 +30,11 @@
         .mode-row button.active.erase-mode { background: #ff3b30; border-color: #c41e16; }
         .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
         .clear-btn { height: 30px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; }
-        #info-tag { position: absolute; top: 85px; left: 10px; background: rgba(0,122,255,0.9); color: #fff; padding: 8px; border-radius: 6px; font-size: 11px; z-index: 150; font-family: monospace; display: none; }
     </style>
 </head>
 <body>
 <canvas id="cvs"></canvas>
-<div id="info-tag" onclick="copyInfo()"></div>
-
 <div id="top-panel"><div id="item-list"><button class="deselect-btn" onclick="deselect()">選択<br>解除</button><label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple onchange="handleFiles(this.files)"></label></div></div>
-
 <div id="bot-panel">
     <div class="slider-section">
         <div class="row"><label>サイズ</label><button class="prec-btn" onclick="adjS(-0.1)">-</button><input type="range" id="size-s" min="0.1" max="5" step="0.1"><button class="prec-btn" onclick="adjS(0.1)">+</button></div>
@@ -73,7 +69,6 @@ const PRESETS = [
 ];
 
 const cvs = document.getElementById('cvs'); const ctx = cvs.getContext('2d');
-const sizeS = document.getElementById('size-s'); const offS = document.getElementById('off-s');
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], lines = [], selIdx = -1, activeAsset = -1, mode = 'move';
@@ -166,8 +161,8 @@ window.adjO = (v) => { if(selIdx!==-1){ map[selIdx].off += v; save(); render(); 
 window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; save(); render(); } };
 function addThumb(idx) { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`; d.onclick = () => { activeAsset = idx; setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); }; document.getElementById('item-list').appendChild(d); }
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function save() { localStorage.setItem('map_v56', JSON.stringify({m:map, l:lines})); }
-function load() { const s = localStorage.getItem('map_v56'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
+function save() { localStorage.setItem('map_final_v1', JSON.stringify({m:map, l:lines})); }
+function load() { const s = localStorage.getItem('map_final_v1'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
 function crop(img) { const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } const w = x2-x1+1, h = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h; c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
 function exportImage() { deselect(); render(); const link = document.createElement('a'); link.download = 'layout.png'; link.href = cvs.toDataURL(); link.click(); }
 window.clearAll = () => { if(confirm("全消去しますか？")){ localStorage.clear(); location.reload(); } };
