@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v23.0.1</title>
+    <title>避難所レイアウト v24.5.0</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
         canvas { display: block; background: #f0f0f0; }
-        #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; }
+        #top-panel { position: absolute; top: 0; width: 100%; height: var(--top-h); background: rgba(255,255,255,0.9); border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; z-index: 100; overflow-x: auto; -webkit-overflow-scrolling: touch; }
         #item-list { display: flex; gap: 8px; align-items: center; }
         .thumb { width: 50px; height: 50px; border-radius: 6px; border: 2px solid #ccc; background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #fff; flex-shrink: 0; }
         .thumb.selected { border-color: #007aff; border-width: 3px; box-shadow: 0 0 10px rgba(0,122,255,0.3); }
@@ -32,7 +32,6 @@
         .clear-btn { height: 32px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; font-weight: bold; }
         .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
         #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; z-index: 50; }
-        /* 保存オーバーレイ */
         #save-overlap { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:200; display:none; flex-direction:column; align-items:center; justify-content:center; color:white; }
         #save-overlap img { max-width:90%; max-height:70%; border:2px solid white; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
     </style>
@@ -40,12 +39,7 @@
 <body>
 <canvas id="cvs"></canvas>
 <div id="zoom-tag">Zoom: 100%</div>
-<div id="save-overlap" onclick="this.style.display='none'">
-    <p style="font-size:14px; margin-bottom:10px;">画像を長押しして保存</p>
-    <img id="out-img">
-    <p style="margin-top:15px; font-size:12px; opacity:0.7;">タップして戻る</p>
-</div>
-
+<div id="save-overlap" onclick="this.style.display='none'"><p style="font-size:14px; margin-bottom:10px;">画像を長押しして保存</p><img id="out-img"><p style="margin-top:15px; font-size:12px; opacity:0.7;">タップして戻る</p></div>
 <div id="top-panel"><div id="item-list"><button class="deselect-btn" onclick="deselect()">選択<br>解除</button><label id="upload-label">＋<input type="file" id="img-in" hidden accept="image/*" multiple></label></div></div>
 <div id="bot-panel">
     <div class="slider-section">
@@ -55,22 +49,61 @@
     <div class="tool-section">
         <div id="nudge-grid"><span></span><button onclick="nudge(0,-0.1)">↑</button><span></span><button onclick="nudge(-0.1,0)">←</button><button onclick="nudge(0,0.1)">↓</button><button onclick="nudge(0.1,0)">→</button></div>
         <div class="mode-box">
-            <button class="save-btn" onclick="exportImage()">📷 画像として保存</button>
+            <button class="save-btn" onclick="exportImage()">画像として保存</button>
             <div class="mode-row"><button id="m-move">移動</button><button id="m-pen">ペン</button><button id="m-erase">消去</button></div>
             <button class="clear-btn" onclick="clearAll()">データリセット</button>
         </div>
     </div>
 </div>
 <script>
+// --- プリセット設定エリア（すべて .png に変更済み） ---
+const PRESETS = [
+    { name: "本部", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.8, o: -15 },
+    { name: "要塞", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.8, o: -15 },
+    { name: "病院", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/MED.png", s: 1.3, o: -5 },
+    { name: "偵察塔", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/OP.png", s: 1.2, o: -5 },
+    { name: "資源地", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/RSS.png", s: 1.0, o: 0 },
+    { name: "倉庫", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/SRG.png", s: 1.3, o: -5 },
+    { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 1.5, o: -10 },
+    { name: "岩1", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK1.png", s: 0.8, o: 0 },
+    { name: "岩2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 0.8, o: 0 }
+];
+// ----------------------------
+
 const cvs = document.getElementById('cvs'); const ctx = cvs.getContext('2d');
 const sizeS = document.getElementById('size-s'); const offS = document.getElementById('off-s');
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], edgeLines = [], selIdx = -1, activeAsset = -1, mode = 'move';
-let drag = false, pinch = false, lastDist = 0, lastMid = {x:0, y:0}, lastT = {x:0, y:0};
-let touchStartTime = 0, hasMoved = false, isClickReady = false;
+let drag = false, pinch = false, lastDist = 0, lastMid = {x:0, y:0}, lastT = {x:0, y:0}, hasMoved = false, isClickReady = false;
 
-function init() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; load(); setMode('move'); render(); }
+function init() {
+    cvs.width = window.innerWidth; cvs.height = window.innerHeight;
+    loadPresets().then(() => { load(); render(); });
+    setMode('move');
+}
+
+async function loadPresets() {
+    for (const p of PRESETS) {
+        await new Promise(resolve => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                const src = crop(img);
+                const i2 = new Image();
+                i2.onload = () => {
+                    assets.push({ img: i2, src, defS: p.s, defO: p.o, url: p.url });
+                    addThumb(assets.length - 1);
+                    resolve();
+                };
+                i2.src = src;
+            };
+            img.onerror = () => { console.error("Missing:", p.url); resolve(); };
+            img.src = p.url;
+        });
+    }
+}
+
 const toS = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
 const toG = (sx, sy) => {
     let x = (sx - cam.x)/cam.z, y = (sy - cam.y)/cam.z;
@@ -80,8 +113,6 @@ const toG = (sx, sy) => {
 function render(isExport = false) {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
-    
-    // 保存用出力時はグリッドを消す
     if(!isExport) {
         ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
         for(let i=-20; i<=40; i++){
@@ -89,9 +120,8 @@ function render(isExport = false) {
             s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
         }
     }
-
     let drawList = [];
-    map.forEach((d, i) => drawList.push({ type: 'img', data: d, sort: d.x + d.s + d.y + d.s, originalIdx: i }));
+    map.forEach((d, i) => drawList.push({ type: 'img', data: d, sort: d.x + d.y, originalIdx: i }));
     edgeLines.forEach((l, i) => drawList.push({ type: 'line', data: l, sort: Math.max(l.x1, l.x2) + Math.max(l.y1, l.y2), originalIdx: i }));
     drawList.sort((a, b) => a.sort - b.sort);
     drawList.forEach(obj => {
@@ -99,8 +129,7 @@ function render(isExport = false) {
             const d = obj.data; const a = assets[d.aIdx]; if(!a || !a.img) return;
             const w = T_W * d.s; const h = (a.img.height/a.img.width) * w;
             const anchor = toS(d.x + 1, d.y + 1);
-            ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + (a.off || 0), w, h);
-            
+            ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + (d.off || 0), w, h);
             if(!isExport && selIdx === obj.originalIdx) {
                 ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2;
                 let pS = anchor, pW = {x:anchor.x-(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pE = {x:anchor.x+(T_W/2)*d.s, y:anchor.y-(T_H/2)*d.s}, pN = {x:anchor.x, y:anchor.y-T_H*d.s};
@@ -114,19 +143,10 @@ function render(isExport = false) {
     ctx.restore();
 }
 
-// 保存用画像生成
-function exportImage() {
-    deselect(); 
-    render(true); // グリッドなしで描画
-    const dataUrl = cvs.toDataURL('image/png');
-    document.getElementById('out-img').src = dataUrl;
-    document.getElementById('save-overlap').style.display = 'flex';
-    render(); // 元のグリッド表示に戻す
-}
+function exportImage() { deselect(); render(true); document.getElementById('out-img').src = cvs.toDataURL('image/png'); document.getElementById('save-overlap').style.display = 'flex'; render(); }
 
 cvs.addEventListener('touchstart', e => {
-    touchStartTime = Date.now(); hasMoved = false; isClickReady = true;
-    const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
+    hasMoved = false; isClickReady = true; const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
     if(e.touches.length >= 2) { pinch = true; drag = false; isClickReady = false;
         lastDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
         lastMid = {x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
@@ -138,36 +158,30 @@ cvs.addEventListener('touchstart', e => {
 cvs.addEventListener('touchmove', e => {
     e.preventDefault(); const t = e.touches[0];
     const moveDist = Math.hypot(t.clientX - lastT.x, t.clientY - lastT.y);
-    if(moveDist > 10) { hasMoved = true; isClickReady = false; }
+    if(moveDist > 5) { hasMoved = true; isClickReady = false; }
     if(pinch && e.touches.length >= 2) {
         let d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
         let m = {x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
         let f = d / lastDist; cam.x = m.x - (m.x - cam.x)*f + (m.x - lastMid.x); cam.y = m.y - (m.y - cam.y)*f + (m.y - lastMid.y);
         cam.z *= f; lastDist = d; lastMid = m; document.getElementById('zoom-tag').innerText = "Zoom: "+Math.round(cam.z*100)+"%";
     } else if(drag) {
-        const g = toG(t.clientX, t.clientY); const prevG = toG(lastT.x, lastT.y);
-        if(mode === 'pen') {
-            let curX = Math.round(g.x), curY = Math.round(g.y);
-            let oldX = Math.round(prevG.x), oldY = Math.round(prevG.y);
-            if(curX !== oldX || curY !== oldY) { addEdgeLine(oldX, oldY, curX, curY); }
-        } else if(mode === 'erase') { removeEdgeLine(g.x, g.y); }
-        else if(mode === 'move' && activeAsset === -1) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
+        if(mode === 'move' && activeAsset === -1) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
     }
     lastT = {x: t.clientX, y: t.clientY}; render();
 }, {passive: false});
 
 cvs.addEventListener('touchend', e => {
-    if(!pinch && isClickReady && !hasMoved && (Date.now() - touchStartTime < 300)) {
+    if(!pinch && isClickReady && !hasMoved) {
         const g = toG(lastT.x, lastT.y);
         if(mode === 'move') {
             if(activeAsset !== -1) {
-                map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
-                selIdx = map.length - 1;
-                render(); 
+                const a = assets[activeAsset];
+                map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:a.defS, off:a.defO});
+                selIdx = map.length - 1; syncSliders();
             } else {
                 let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
-                if(h !== -1) { selIdx = h; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; }
-                else { selIdx = -1; }
+                if(h !== -1) { selIdx = h; syncSliders(); }
+                else { selIdx = -1; syncSliders(); }
             }
         } else if(mode === 'erase') {
             let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
@@ -177,46 +191,24 @@ cvs.addEventListener('touchend', e => {
     drag = pinch = isClickReady = false; save(); render();
 });
 
-function addEdgeLine(gx1, gy1, gx2, gy2) {
-    if(gx1 === gx2 && gy1 === gy2) return;
-    const key = [gx1, gy1, gx2, gy2].sort((a,b)=>a-b).join(',');
-    if(!edgeLines.some(l => [l.x1, l.y1, l.x2, l.y2].sort((a,b)=>a-b).join(',') === key)) {
-        edgeLines.push({x1:gx1, y1:gy1, x2:gx2, y2:gy2});
-    }
-}
-function removeEdgeLine(gx, gy) {
-    let x = Math.round(gx), y = Math.round(gy);
-    edgeLines = edgeLines.filter(l => !((Math.abs(l.x1-x)<0.6 && Math.abs(l.y1-y)<0.6) || (Math.abs(l.x2-x)<0.6 && Math.abs(l.y2-y)<0.6)));
+function syncSliders() {
+    if(selIdx !== -1) { sizeS.value = map[selIdx].s; offS.value = map[selIdx].off; }
+    else if(activeAsset !== -1) { sizeS.value = assets[activeAsset].defS; offS.value = assets[activeAsset].defO; }
+    else { sizeS.value = 1; offS.value = 0; }
 }
 
-window.deselect = () => { 
-    activeAsset = -1; selIdx = -1; 
-    document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); 
-    render(); 
-};
-
-function setMode(m) {
-    mode = m; selIdx = -1; if(m !== 'move') activeAsset = -1;
-    document.getElementById('m-move').className = m === 'move' ? 'active' : '';
-    document.getElementById('m-pen').className = m === 'pen' ? 'active' : '';
-    document.getElementById('m-erase').className = m === 'erase' ? 'active' : '';
-    render();
-}
+window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); syncSliders(); render(); };
+function setMode(m) { mode = m; selIdx = -1; if(m!=='move') activeAsset = -1; ['m-move','m-pen','m-erase'].forEach(id => document.getElementById(id).className = id===`m-${m}`?'active':''); render(); }
 document.getElementById('m-move').onclick = () => setMode('move');
 document.getElementById('m-pen').onclick = () => setMode('pen');
 document.getElementById('m-erase').onclick = () => setMode('erase');
 
 document.getElementById('img-in').onchange = (e) => {
     for(let f of e.target.files) {
-        const r = new FileReader();
-        r.onload = (ev) => {
+        const r = new FileReader(); r.onload = (ev) => {
             const i = new Image(); i.onload = () => {
                 const src = crop(i); const i2 = new Image();
-                i2.onload = () => { 
-                    assets.push({img: i2, src: src, off: 0}); 
-                    addThumb(assets.length - 1);
-                    save(); 
-                }; i2.src = src;
+                i2.onload = () => { assets.push({img:i2, src, defS:1, defO:0}); addThumb(assets.length-1); save(); }; i2.src = src;
             }; i.src = ev.target.result;
         }; r.readAsDataURL(f);
     }
@@ -233,41 +225,44 @@ function crop(img) {
 }
 
 function addThumb(idx) {
-    const d = document.createElement('div');
-    d.className = 'thumb';
-    d.style.backgroundImage = `url(${assets[idx].src})`;
-    d.onclick = () => {
-        setMode('move');
-        document.querySelectorAll('.thumb').forEach(t => t.classList.remove('selected'));
-        d.classList.add('selected');
-        activeAsset = idx;
-        selIdx = -1;
-        render(); 
-    };
-    const list = document.getElementById('item-list');
-    const uLabel = document.getElementById('upload-label');
-    list.insertBefore(d, uLabel);
+    const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`;
+    d.onclick = () => { setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); activeAsset=idx; syncSliders(); render(); };
+    document.getElementById('item-list').insertBefore(d, document.getElementById('upload-label'));
 }
 
-function save() { localStorage.setItem('map_v28', JSON.stringify({m: map, el: edgeLines, a: assets.map(a=>({src:a.src, off:a.off}))})); }
+function save() { localStorage.setItem('map_v40', JSON.stringify({m:map, el:edgeLines, a:assets.filter(a=>!PRESETS.some(p=>p.url===a.url)).map(a=>({src:a.src, defS:a.defS, defO:a.defO}))})); }
 function load() {
-    const s = localStorage.getItem('map_v28'); if(!s) return;
+    const s = localStorage.getItem('map_v40'); if(!s) return;
     const d = JSON.parse(s); map = d.m || []; edgeLines = d.el || [];
-    d.a.forEach((ad, i) => { 
-        const img = new Image(); 
-        img.onload = () => { 
-            assets[i]={img, src:ad.src, off:ad.off}; 
-            addThumb(i); render(); 
-        }; 
-        img.src = ad.src; 
-    });
+    d.a.forEach((ad, i) => { const img = new Image(); img.onload = () => { assets.push({img, src:ad.src, defS:ad.defS||1, defO:ad.defO||0}); addThumb(assets.length-1); render(); }; img.src = ad.src; });
 }
+
 window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; render(); save(); } };
-window.adjS = (v) => { if(selIdx!==-1){ let n = parseFloat(sizeS.value)+v; n=Math.max(0.1,Math.min(5,n)); sizeS.value=n; map[selIdx].s=n; render(); save(); } };
-window.adjO = (v) => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ let n=parseInt(offS.value)+v; offS.value=n; assets[idx].off=n; render(); save(); } };
-sizeS.oninput = () => { if(selIdx!==-1){ map[selIdx].s=parseFloat(sizeS.value); render(); } };
-offS.oninput = () => { let idx=(selIdx!==-1)?map[selIdx].aIdx:activeAsset; if(idx!==-1){ assets[idx].off=parseInt(offS.value); render(); } };
-window.clearAll = () => { if(confirm("【警告】リセットしますか？")){ localStorage.clear(); location.reload(); } };
+window.adjS = (v) => { 
+    let val = parseFloat(sizeS.value)+v; val=Math.max(0.1,Math.min(5,val)); sizeS.value=val.toFixed(1); 
+    if(selIdx!==-1) map[selIdx].s=parseFloat(val); 
+    if(activeAsset!==-1) assets[activeAsset].defS=parseFloat(val);
+    save(); render(); 
+};
+window.adjO = (v) => { 
+    let val = parseInt(offS.value)+v; offS.value=val; 
+    if(selIdx!==-1) map[selIdx].off=val; 
+    if(activeAsset!==-1) assets[activeAsset].defO=val;
+    save(); render(); 
+};
+sizeS.oninput = () => { 
+    const val = parseFloat(sizeS.value);
+    if(selIdx!==-1) map[selIdx].s=val; 
+    if(activeAsset!==-1) assets[activeAsset].defS=val;
+    save(); render(); 
+};
+offS.oninput = () => { 
+    const val = parseInt(offS.value);
+    if(selIdx!==-1) map[selIdx].off=val; 
+    if(activeAsset!==-1) assets[activeAsset].defO=val;
+    save(); render(); 
+};
+window.clearAll = () => { if(confirm("消去しますか？")){ localStorage.clear(); location.reload(); } };
 init();
 </script>
 </body>
