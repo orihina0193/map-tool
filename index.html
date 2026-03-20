@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v25.0.0</title>
+    <title>避難所レイアウト v25.1.0</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -32,17 +32,20 @@
         .clear-btn { height: 32px; font-size: 11px; background: #eee; border: 1px solid #ccc; border-radius: 6px; color: #d32f2f; font-weight: bold; }
         .save-btn { height: 40px; font-size: 14px; background: #34c759; border: none; border-radius: 8px; color: white; font-weight: bold; }
         
-        /* 数値表示用タグ (拡張) */
-        #info-tag { position: absolute; top: 85px; left: 10px; background: rgba(0,122,255,0.9); color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 11px; z-index: 50; font-family: monospace; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2); line-height: 1.4; }
+        /* コピー可能な数値タグ */
+        #info-tag { position: absolute; top: 85px; left: 10px; background: rgba(0,122,255,0.9); color: #fff; padding: 10px; border-radius: 8px; font-size: 11px; z-index: 150; font-family: monospace; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2); line-height: 1.4; transition: transform 0.1s; cursor: pointer; -webkit-user-select: none; }
+        #info-tag:active { transform: scale(0.95); background: rgba(0,122,255,1); }
+        #copy-toast { position: fixed; top: 140px; left: 10px; background: #34c759; color: white; padding: 4px 10px; border-radius: 4px; font-size: 10px; z-index: 200; display: none; font-weight: bold; }
         #zoom-tag { position: absolute; top: 85px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 6px 12px; border-radius: 12px; font-size: 12px; z-index: 50; }
         
-        #save-overlap { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:200; display:none; flex-direction:column; align-items:center; justify-content:center; color:white; }
+        #save-overlap { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:300; display:none; flex-direction:column; align-items:center; justify-content:center; color:white; }
         #save-overlap img { max-width:90%; max-height:70%; border:2px solid white; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
 <canvas id="cvs"></canvas>
-<div id="info-tag"></div>
+<div id="info-tag" onclick="copyInfo()"></div>
+<div id="copy-toast">コピーしました！</div>
 <div id="zoom-tag">Zoom: 100%</div>
 <div id="save-overlap" onclick="this.style.display='none'"><p style="font-size:14px; margin-bottom:10px;">画像を長押しして保存</p><img id="out-img"><p style="margin-top:15px; font-size:12px; opacity:0.7;">タップして戻る</p></div>
 
@@ -84,6 +87,7 @@ const PRESETS = [
 const cvs = document.getElementById('cvs'); const ctx = cvs.getContext('2d');
 const sizeS = document.getElementById('size-s'); const offS = document.getElementById('off-s');
 const infoTag = document.getElementById('info-tag');
+const toast = document.getElementById('copy-toast');
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], selIdx = -1, activeAsset = -1, mode = 'move';
@@ -154,11 +158,21 @@ function updateInfo() {
         const d = map[selIdx];
         const a = assets[d.aIdx];
         infoTag.style.display = 'block';
-        infoTag.innerHTML = `<strong>${a.name || '画像'}</strong><br>Pos: x=${d.x.toFixed(1)}, y=${d.y.toFixed(1)}<br>Size: s=${d.s.toFixed(1)}, o=${d.off}`;
+        infoTag.innerHTML = `<strong>${a.name || '画像'}</strong><br>Pos: x=${d.x.toFixed(1)}, y=${d.y.toFixed(1)}<br>Size: s=${d.s.toFixed(1)}, o=${d.off}<br><span style="font-size:9px; opacity:0.8;">タップでコピー</span>`;
     } else {
         infoTag.style.display = 'none';
     }
 }
+
+window.copyInfo = () => {
+    if(selIdx === -1) return;
+    const d = map[selIdx]; const a = assets[d.aIdx];
+    const text = `${a.name}: Pos: x=${d.x.toFixed(1)}, y=${d.y.toFixed(1)} Size: s=${d.s.toFixed(1)}, o=${d.off}`;
+    navigator.clipboard.writeText(text).then(() => {
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, 2000);
+    });
+};
 
 function exportImage() { deselect(); render(true); document.getElementById('out-img').src = cvs.toDataURL('image/png'); document.getElementById('save-overlap').style.display = 'flex'; render(); }
 
