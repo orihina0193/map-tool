@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v27.7.5</title>
+    <title>避難所レイアウト v27.7.6</title>
     <style>
         :root { --top-h: 75px; --bot-h: 260px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -73,7 +73,7 @@ const sizeS = document.getElementById('size-s'); const offS = document.getElemen
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], lines = [], selIdx = -1, activeAsset = -1, mode = 'move';
-let drag = false, lastT = {x: 0, y: 0}, lastG = null;
+let drag = false, pinch = false, lastT = {x: 0, y: 0}, lastG = null, lastDist = 0;
 
 function init() {
     cvs.width = window.innerWidth; cvs.height = window.innerHeight;
@@ -103,30 +103,32 @@ const toG = (sx, sy) => {
 function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height);
     ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
-    
-    ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1/cam.z;
     for(let i=-20; i<=40; i++){
         let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
         s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke();
     }
-
     lines.forEach(l => {
-        ctx.beginPath(); ctx.strokeStyle = "rgba(255,0,0,0.6)"; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.strokeStyle = "rgba(255,0,0,0.6)"; ctx.lineWidth = 4/cam.z;
         const s = toS(l.x1, l.y1), e = toS(l.x2, l.y2);
         ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
     });
-
     map.sort((a,b)=>(a.x+a.y)-(b.x+b.y)).forEach((d, i) => {
         const a = assets[d.aIdx]; if(!a) return;
         const w = T_W * d.s, h = (a.img.height/a.img.width) * w;
         const anchor = toS(d.x + a.gw, d.y + a.gh);
         ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + d.off, w, h);
-        if(selIdx === i) { ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2; const pS = toS(d.x+a.gw, d.y+a.gh), pW = toS(d.x, d.y+a.gh), pE = toS(d.x+a.gw, d.y), pN = toS(d.x, d.y); ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke(); }
+        if(selIdx === i) { ctx.strokeStyle = "#007aff"; ctx.lineWidth = 2/cam.z; const pS = toS(d.x+a.gw, d.y+a.gh), pW = toS(d.x, d.y+a.gh), pE = toS(d.x+a.gw, d.y), pN = toS(d.x, d.y); ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke(); }
     });
     ctx.restore();
 }
 
 cvs.addEventListener('touchstart', e => {
+    if(e.touches.length >= 2) {
+        pinch = true; drag = false;
+        lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        return;
+    }
     const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
     const g = toG(t.clientX, t.clientY); lastG = g;
     if(mode === 'move') {
@@ -135,23 +137,31 @@ cvs.addEventListener('touchstart', e => {
         drag = true;
     } else if(mode === 'erase') { map = map.filter(d => { const a = assets[d.aIdx]; return !(g.x >= d.x && g.x < d.x+a.gw && g.y >= d.y && g.y < d.y+a.gh); }); save(); }
     render();
-});
+}, {passive: false});
 
 cvs.addEventListener('touchmove', e => {
-    const t = e.touches[0]; const g = toG(t.clientX, t.clientY);
-    if(mode === 'pen') {
-        if(lastG && (g.x !== lastG.x || g.y !== lastG.y)) {
-            if(!lines.some(l => (l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))) {
-                lines.push({x1: lastG.x, y1: lastG.y, x2: g.x, y2: g.y}); save();
+    e.preventDefault();
+    if(pinch && e.touches.length >= 2) {
+        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const zoom = dist / lastDist;
+        cam.z *= zoom; lastDist = dist;
+    } else {
+        const t = e.touches[0]; const g = toG(t.clientX, t.clientY);
+        if(mode === 'pen') {
+            if(lastG && (g.x !== lastG.x || g.y !== lastG.y)) {
+                if(!lines.some(l => (l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))) {
+                    lines.push({x1: lastG.x, y1: lastG.y, x2: g.x, y2: g.y}); save();
+                }
             }
-        }
-    } else if(mode === 'p-erase') {
-        lines = lines.filter(l => !((l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))); save();
-    } else if(drag) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
-    lastT = {x: t.clientX, y: t.clientY}; lastG = g; render();
-});
+        } else if(mode === 'p-erase') {
+            lines = lines.filter(l => !((l.x1==lastG.x && l.y1==lastG.y && l.x2==g.x && l.y2==g.y) || (l.x1==g.x && l.y1==g.y && l.x2==lastG.x && l.y2==lastG.y))); save();
+        } else if(drag) { cam.x += (t.clientX - lastT.x); cam.y += (t.clientY - lastT.y); }
+        lastT = {x: t.clientX, y: t.clientY}; lastG = g;
+    }
+    render();
+}, {passive: false});
 
-cvs.addEventListener('touchend', () => { drag = false; lastG = null; });
+cvs.addEventListener('touchend', () => { drag = pinch = false; lastG = null; });
 
 function setMode(m) { mode = m; document.querySelectorAll('.mode-row button').forEach(b => b.classList.remove('active')); document.getElementById(`m-${m}`).classList.add('active'); }
 window.adjS = (v) => { if(selIdx!==-1){ map[selIdx].s += v; save(); render(); } };
@@ -159,8 +169,8 @@ window.adjO = (v) => { if(selIdx!==-1){ map[selIdx].off += v; save(); render(); 
 window.nudge = (dx,dy) => { if(selIdx!==-1){ map[selIdx].x+=dx; map[selIdx].y+=dy; save(); render(); } };
 function addThumb(idx) { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`; d.onclick = () => { activeAsset = idx; setMode('move'); document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); d.classList.add('selected'); }; document.getElementById('item-list').appendChild(d); }
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function save() { localStorage.setItem('map_v52', JSON.stringify({m:map, l:lines})); }
-function load() { const s = localStorage.getItem('map_v52'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
+function save() { localStorage.setItem('map_v53', JSON.stringify({m:map, l:lines})); }
+function load() { const s = localStorage.getItem('map_v53'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
 function crop(img) { const c = document.createElement('canvas'); const t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } const w = x2-x1+1, h = y2-y1+1; const c2 = document.createElement('canvas'); c2.width = w; c2.height = h; c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
 function exportImage() { deselect(); render(); const link = document.createElement('a'); link.download = 'layout.png'; link.href = cvs.toDataURL(); link.click(); }
 window.clearAll = () => { if(confirm("全消去しますか？")){ localStorage.clear(); location.reload(); } };
