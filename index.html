@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v22.9.8</title>
+    <title>避難所レイアウト v23.0.0</title>
     <style>
         :root { --top-h: 75px; --bot-h: 245px; }
         body { margin: 0; overflow: hidden; background: #e0e5ec; font-family: sans-serif; touch-action: none; position: fixed; width: 100%; height: 100%; }
@@ -60,7 +60,7 @@ const sizeS = document.getElementById('size-s'); const offS = document.getElemen
 const T_W = 64, T_H = 32;
 let cam = { x: window.innerWidth/2, y: window.innerHeight/3, z: 1 };
 let assets = [], map = [], edgeLines = [], selIdx = -1, activeAsset = -1, mode = 'move';
-let drag = false, pinch = false, lastDist = 0, lastMid = {x:0, y:0}, lastT = {x:0, y:0};
+let drag = false, pinch = false, lastDist = 0, lastMid = {x:0, y:0}, lastT = {x:0, y:0}, isTap = false;
 
 function init() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; load(); setMode('move'); render(); }
 const toS = (gx, gy) => ({ x: (gx - gy) * (T_W/2), y: (gx + gy) * (T_H/2) });
@@ -70,8 +70,7 @@ const toG = (sx, sy) => {
 };
 
 function render(isExport = false) {
-    ctx.clearRect(0,0,cvs.width,cvs.height);
-    ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
+    ctx.clearRect(0,0,cvs.width,cvs.height); ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
     if(!isExport) {
         ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
         for(let i=-20; i<=40; i++){
@@ -102,24 +101,25 @@ function render(isExport = false) {
     ctx.restore();
 }
 
-function exportImage() {
-    deselect(); render(true); 
-    document.getElementById('out-img').src = cvs.toDataURL('image/png');
-    document.getElementById('save-overlap').style.display = 'flex'; render();
-}
+function exportImage() { deselect(); render(true); document.getElementById('out-img').src = cvs.toDataURL('image/png'); document.getElementById('save-overlap').style.display = 'flex'; render(); }
 
 cvs.addEventListener('touchstart', e => {
-    const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
-    if(e.touches.length >= 2) { pinch = true; drag = false;
+    isTap = true; const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY};
+    if(e.touches.length >= 2) { pinch = true; drag = false; isTap = false;
         lastDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
         lastMid = {x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
         return;
     }
-    drag = true;
+    // 配置モードなら触れた瞬間に置く！
+    if(mode === 'move' && activeAsset !== -1) {
+        const g = toG(t.clientX, t.clientY);
+        map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
+        selIdx = map.length - 1; isTap = false; drag = false; save(); render();
+    } else { drag = true; }
 }, {passive: false});
 
 cvs.addEventListener('touchmove', e => {
-    e.preventDefault(); const t = e.touches[0];
+    e.preventDefault(); isTap = false; const t = e.touches[0];
     if(pinch && e.touches.length >= 2) {
         let d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
         let m = {x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
@@ -136,17 +136,12 @@ cvs.addEventListener('touchmove', e => {
 }, {passive: false});
 
 cvs.addEventListener('touchend', e => {
-    if(!pinch) {
+    if(isTap && !pinch) {
         const g = toG(lastT.x, lastT.y);
-        if(mode === 'move') {
-            if(activeAsset !== -1) {
-                map.push({x:Math.floor(g.x), y:Math.floor(g.y), aIdx:activeAsset, s:parseFloat(sizeS.value)});
-                selIdx = map.length - 1;
-            } else {
-                let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1.2 && Math.abs(g.y - (d.y+0.5)) < 1.2);
-                if(h !== -1) { selIdx = h; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; }
-                else { selIdx = -1; }
-            }
+        if(mode === 'move' && activeAsset === -1) {
+            let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1.2 && Math.abs(g.y - (d.y+0.5)) < 1.2);
+            if(h !== -1) { selIdx = h; sizeS.value = map[h].s; offS.value = assets[map[h].aIdx].off || 0; }
+            else { selIdx = -1; }
         } else if(mode === 'erase') {
             let h = map.findLastIndex(d => Math.abs(g.x - (d.x+0.5)) < 1 && Math.abs(g.y - (d.y+0.5)) < 1);
             if(h !== -1) map.splice(h, 1);
@@ -161,11 +156,7 @@ function addEdgeLine(x1, y1, x2, y2) {
     if(!edgeLines.some(l => [l.x1,l.y1,l.x2,l.y2].sort((a,b)=>a-b).join(',') === key)) edgeLines.push({x1, y1, x2, y2});
 }
 window.deselect = () => { activeAsset = -1; selIdx = -1; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); render(); };
-function setMode(m) {
-    mode = m; selIdx = -1; if(m!=='move') activeAsset = -1;
-    ['m-move','m-pen','m-erase'].forEach(id => document.getElementById(id).className = id===`m-${m}`?'active':'');
-    render();
-}
+function setMode(m) { mode = m; selIdx = -1; if(m!=='move') activeAsset = -1; ['m-move','m-pen','m-erase'].forEach(id => document.getElementById(id).className = id===`m-${m}`?'active':''); render(); }
 document.getElementById('m-move').onclick = () => setMode('move');
 document.getElementById('m-pen').onclick = () => setMode('pen');
 document.getElementById('m-erase').onclick = () => setMode('erase');
