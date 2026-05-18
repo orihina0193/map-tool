@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.3</title>
+    <title>避難所レイアウト v29.3.4</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -89,7 +89,7 @@ const GUIDE_TEXT = {
     'ギルメン名': '配置した建物に名前を付けます。黒背景のネームタグが表示されます。',
     '名簿': '配置済みのメンバーを一覧表示します。名前をタップするとその場所へジャンプします。',
     '素材追加': '建物の追加。フォルダアイコンからスマホ内の画像も取り込めます。',
-    'リセット': '画面をリロードして最初からやり直します。',
+    'リセット': '画面をリロードして最初からやり長します。',
     'サイズ調整': '建物の大きさを変えます。',
     '接地調整': '建物の重なり順や、マスの接地位置を上下に微調整します。',
     '微調整': '矢印ボタンで、建物をドット単位で細かく動かします。',
@@ -106,7 +106,7 @@ function toggleGuideMode() {
     btn.classList.toggle('active'); btn.innerText = guideMode ? '×' : '?';
     msg.style.display = guideMode ? 'block' : 'none';
     msg.innerText = 'ガイドモード：ボタンをタップして説明を表示';
-    if (!guideMode) deselect(); // ガイド終了時に選択状態をクリア（事故防止）
+    if (!guideMode) deselect();
 }
 
 function handleGuideClick(key, event) {
@@ -206,47 +206,36 @@ function adjO(v) { if(selIdx!==-1){ map[selIdx].off+=v; updatePanel(); save(); r
 function nudge(dx,dy) { if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
 
-// 短縮URL発行用コールバック関数
+// 短縮URLが戻ってきた時の処理
 function handleShortURL(response) {
     const activeScript = document.getElementById('isgd-jsonp');
     if (activeScript) activeScript.remove();
-
+    // 短縮に成功した場合のみ、クリップボードを短いURLで上書きする
     if (response && response.shorturl) {
         navigator.clipboard.writeText(response.shorturl);
-        alert("短縮URLをコピーしました:\n" + response.shorturl);
-    } else {
-        // 万が一エラーが出た場合は元の長いURLをコピー
-        const fallbackUrl = window.lastGeneratedFullUrl || window.location.href;
-        navigator.clipboard.writeText(fallbackUrl);
-        alert("短縮に失敗したため、通常のURLをコピーしました。");
     }
 }
 
-async function exportURL() {
+function exportURL() {
     const exportMap = map.map(d => {
         const a = assets[d.aIdx];
         return { n: a.name || null, x: d.x, y: d.y, s: d.s, off: d.off, ox: d.ox, oy: d.oy, mem: d.mem, src: a.name ? null : a.src };
     });
     const compressed = LZString.compressToEncodedURIComponent(JSON.stringify({ m: exportMap, l: lines }));
     const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed;
-    window.lastGeneratedFullUrl = fullUrl;
 
-    // 既存のJSONPスクリプトがあれば削除
+    // 【元の仕様を完全維持】押したその瞬間に、まずは長いURLを確実にコピー！
+    navigator.clipboard.writeText(fullUrl);
+
+    // 古いJSONP用スクリプトがあれば削除
     const oldScript = document.getElementById('isgd-jsonp');
     if (oldScript) oldScript.remove();
 
-    // JSONP方式でis.gdのAPIを叩くためのscriptタグを動的生成
+    // バックグラウンドで非同期に短縮URLを取得し、成功したら上書きする
     const script = document.createElement('script');
     script.id = 'isgd-jsonp';
     script.src = `https://is.gd/create.php?format=json&callback=handleShortURL&url=${encodeURIComponent(fullUrl)}`;
-    
-    // スクリプトの読み込みエラー対策
-    script.onerror = function() {
-        navigator.clipboard.writeText(fullUrl);
-        alert("通信エラーのため、通常のURLをコピーしました。");
-        script.remove();
-    };
-
+    script.onerror = function() { script.remove(); };
     document.body.appendChild(script);
 }
 
