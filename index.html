@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.4</title>
+    <title>避難所レイアウト v29.3.5</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -229,7 +229,8 @@ async function exportURL() {
 
   try {
     // 🔥 ここを修正（json → simple）
-    const res = await fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(fullUrl)}`);
+    const res = await fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(encodeURIComponent(fullUrl))
+}`);
     const short = await res.text();
     navigator.clipboard.writeText(short || fullUrl);
     alert("URLをコピーしました");
