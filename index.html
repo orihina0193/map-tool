@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.7</title>
+    <title>避難所レイアウト v29.3.8</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -214,9 +214,11 @@ function exportURL() {
     const compressed = LZString.compressToEncodedURIComponent(JSON.stringify({ m: exportMap, l: lines }));
     const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed;
 
+    // 保険として長いURLをクリップボードに格納
     navigator.clipboard.writeText(fullUrl).catch(err => console.log('Clipboard fallback active'));
 
-    const proxyUrl = "https://corsproxy.io/?";
+    // corsproxy.io の正しいURL構文に完全修正
+    const proxyUrl = "https://corsproxy.io/?url=";
     const targetApi = `https://is.gd/create.php?format=simple&url=${encodeURIComponent(fullUrl)}`;
 
     fetch(proxyUrl + encodeURIComponent(targetApi))
@@ -225,11 +227,12 @@ function exportURL() {
             return res.text();
         })
         .then(shortUrl => {
-            if (shortUrl && shortUrl.startsWith("https://is.gd/")) {
-                navigator.clipboard.writeText(shortUrl.trim()).then(() => {
-                    alert("短縮URLのコピーが完了しました！\n" + shortUrl);
+            if (shortUrl && shortUrl.trim().startsWith("https://is.gd/")) {
+                const finalUrl = shortUrl.trim();
+                navigator.clipboard.writeText(finalUrl).then(() => {
+                    alert("短縮URLのコピーが完了しました！\n" + finalUrl);
                 }).catch(() => {
-                    alert("短縮URLが生成されました。コピーしてご利用ください：\n" + shortUrl);
+                    alert("短縮URLが生成されました。コピーしてご利用ください：\n" + finalUrl);
                 });
             } else {
                 alert("共有URL（通常版）をコピーしました！");
