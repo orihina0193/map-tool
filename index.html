@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.7</title>
+    <title>避難所レイアウト v29.3.8</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -233,24 +233,21 @@ async function exportURL() {
     };
 
     try {
-        // 大手で超安定している allorigins プロキシを経由して is.gd で短縮
-        const targetUrl = `https://is.gd/create.php?format=simple&url=${encodeURIComponent(fullUrl)}`;
-        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`);
+        // 大容量URLに対応＆CORS制限なしの「p.tl」を使用
+        // これなら中継サーバーも不要で、PC・スマホどちらも直接通信できます
+        const res = await fetch(`https://p.tl/api/v1/shorten?url=${encodeURIComponent(fullUrl)}`);
         
-        if (!res.ok) throw new Error('Proxy failed');
+        if (!res.ok) throw new Error('p.tl failed');
         
         const data = await res.json();
-        let shortUrl = data.contents; // alloriginsは contents の中に結果が入ります
         
-        if (shortUrl) {
-            shortUrl = shortUrl.trim();
-            if (shortUrl.startsWith('http')) {
-                await copyToClipboard(shortUrl);
-                alert("短縮URLをコピーしました！");
-                return;
-            }
+        // p.tlは成功すると short_url という項目に短縮URLが入ります
+        if (data && data.short_url) {
+            await copyToClipboard(data.short_url);
+            alert("短縮URLをコピーしました！");
+            return;
         }
-        throw new Error('Invalid URL');
+        throw new Error('Invalid URL data');
     } catch (e) {
         try {
             await copyToClipboard(fullUrl);
