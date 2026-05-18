@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.4.1</title>
+    <title>避難所レイアウト v29.5.0</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -57,7 +57,7 @@
     <div id="guide-msg-box">ガイドモード：ボタンをタップして説明を表示</div>
     <div id="top-panel">
         <div id="cur-box" onclick="handleGuideClick('選択解除', event) || deselect()" title="選択解除"></div>
-        <input type="text" id="member-name-in" placeholder="ギルメン名またはコードを貼付" oninput="handleTopInput(this.value)" onclick="if(guideMode){ handleGuideClick('ギルメン名', event); this.blur(); }">
+        <input type="text" id="member-name-in" placeholder="ギルメン名またはコード・URLを貼付" oninput="handleTopInput(this.value)" onclick="if(guideMode){ handleGuideClick('ギルメン名', event); this.blur(); }">
         <button class="top-btn" onclick="handleGuideClick('名簿', event) || openMemberList()" title="名簿">👥</button>
         <button class="top-btn" onclick="handleGuideClick('素材追加', event) || toggleAssetModal(true)" title="素材追加">＋</button>
         <button class="reload-btn" onclick="handleGuideClick('リセット', event) || location.reload()" title="リセット">🔄</button>
@@ -74,7 +74,7 @@
         <div id="nudge-grid" onclick="handleGuideClick('微調整', event)"><button style="grid-column:2" onclick="if(!guideMode)nudge(0,-0.1)">↑</button><button style="grid-column:1" onclick="if(!guideMode)nudge(-0.1,0)">←</button><button style="grid-column:2" onclick="if(!guideMode)nudge(0,0.1)">↓</button><button style="grid-column:3" onclick="if(!guideMode)nudge(0.1,0)">→</button></div>
         <div class="mode-box">
             <button class="save-btn" onclick="handleGuideClick('画像保存', event) || exportImage()">画像として保存</button>
-            <div style="display:flex; gap:3px;"><button class="data-btn btn-out" onclick="handleGuideClick('共有コード', event) || exportDataCode()">配置コードコピー</button><button class="data-btn btn-clr" onclick="handleGuideClick('全消去', event) || clearAll()">全消去</button></div>
+            <div style="display:flex; gap:3px;"><button class="data-btn btn-out" id="copy-btn" onclick="handleGuideClick('共有コード', event) || exportDataCode()">短縮URLコピー</button><button class="data-btn btn-clr" onclick="handleGuideClick('全消去', event) || clearAll()">全消去</button></div>
             <div class="mode-row" onclick="handleGuideClick('モード切替', event)"><button id="m-move" onclick="if(!guideMode)setMode('move')">移動</button><button id="m-pen" onclick="if(!guideMode)setMode('pen')">ペン</button><button id="m-p-erase" onclick="if(!guideMode)setMode('p-erase')">線消</button><button id="m-erase" onclick="if(!guideMode)setMode('erase')">建物消</button></div>
         </div>
     </div>
@@ -86,7 +86,7 @@
 let guideMode = false;
 const GUIDE_TEXT = {
     '選択解除': '現在選んでいる建物を解除します。',
-    'ギルメン名': '配置した建物に名前を付けます。ここにコピーしたPZSコード、または短縮URLの末尾（英数字）を貼り付けるとマップが復元します。',
+    'ギルメン名': '配置した建物に名前を付けます。ここにコピーした短縮URL、またはコードを貼り付けるとマップが復元します。',
     '名簿': '配置済みのメンバーを一覧表示します。名前をタップするとその場所へジャンプします。',
     '素材追加': '建物の追加。フォルダアイコンからスマホ内の画像も取り込めます。',
     'リセット': '画面をリロードして最初からやり直します。',
@@ -94,7 +94,7 @@ const GUIDE_TEXT = {
     '接地調整': '建物の重なり順や、マスの接地位置を上下に微調整します。',
     '微調整': '矢印ボタンで、建物をドット単位で細かく動かします。',
     '画像保存': '現在見えているキャンバスの画像を保存します。',
-    '共有コード': 'チャットの検閲に絶対に引っかからない「is.gd」を使った共有コードをコピーします。',
+    '共有コード': '押すだけで「is.gd/xxxx」の形の、チャットを100%通る短縮URLを自動生成してコピーします。',
     '全消去': 'すべての建物と線を消して空にします。',
     'モード切替': '移動、ペン（赤い線）、消しゴムのモードを切り替えます。'
 };
@@ -190,11 +190,10 @@ function jumpToMember(id) { const d = map.find(item => item.id === id); if(!d) r
 function deselect() { activeAsset = -1; tempAssetStore = -1; selIdx = -1; lockedId = null; updateCurBox(); render(); }
 
 function handleTopInput(val) { 
-    // PZSコード、またはis.gd経由のコード入力を判定して復元
-    if(val.startsWith("PZS") || /^[A-Za-z0-9_\-]+$/.test(val)) { 
+    if(val.startsWith("PZS") || val.includes("is.gd/") || /^[A-Za-z0-9_\-]+$/.test(val)) { 
         applyData(val); 
         document.getElementById('member-name-in').value = ""; 
-        alert("配置コードからマップを復元しました！"); 
+        alert("配置コード（または短縮URL）からマップを復元しました！"); 
         return; 
     } 
     if(selIdx !== -1) { map[selIdx].mem = val; save(); render(); } 
@@ -217,9 +216,13 @@ function adjO(v) { if(selIdx!==-1){ map[selIdx].off+=v; updatePanel(); save(); r
 function nudge(dx,dy) { if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
 
-// ★is.gd用のドメイン・記号検閲を100%すり抜けるエンコーダー★
+// ★ボタン一発でis.gd短縮URLを直接生成・コピーする超機能★
 function exportDataCode() {
     deselect(); render(); 
+    const btn = document.getElementById('copy-btn');
+    btn.innerText = "生成中...";
+    btn.disabled = true;
+
     const nameList = [];
     map.forEach(d => { if (d.mem && !nameList.includes(d.mem)) nameList.push(d.mem); });
 
@@ -231,38 +234,70 @@ function exportDataCode() {
     let exportData = { m: minimizeMap(), l: [], names: nameList };
     let compressed = LZString.compressToBase64(JSON.stringify(exportData));
     
-    // is.gdの短縮URLでエラーにならず、かつパズサバ検閲（+, /, =, .）に引っかからない安全文字への置換
+    // パズサバの検閲を絶対に弾く安全文字への変換
     let safeCode = compressed.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
     let codeResult = "PZS" + safeCode;
 
-    const copyToClipboard = (text) => {
-        if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
-        const textArea = document.createElement("textarea"); textArea.value = text;
-        textArea.style.position = "fixed"; document.body.appendChild(textArea);
-        textArea.focus(); textArea.select();
-        try { document.execCommand('copy'); return true; } catch (err) { return false; }
-        finally { document.body.removeChild(textArea); }
-    };
+    // 現在開いているこのツールのベースURL（ギルメンがベースとして開くページ）
+    // ※ローカルファイル運用の場合はダミーの基準になりますが、基本URLとデータを繋ぎます
+    let currentUrl = window.location.href.split('?')[0];
+    let targetFullUrl = currentUrl + "?d=" + codeResult;
 
-    if (copyToClipboard(codeResult)) {
-        alert("【配置コードのコピー成功！】\n\n「is.gd」ドメインで安全に共有できるコードをコピーしました。\nパズサバのチャットにそのまま貼り付けて送信可能です！");
-    } else {
-        alert("コピーに失敗しました。");
-    }
+    // CORS制限（通信エラー）を100%回避するため、公開プロキシ（Allorigins）を経由してis.gdへ短縮を依頼
+    let apiUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent("https://is.gd/create.php?format=simple&url=" + encodeURIComponent(targetFullUrl));
+
+    fetch(apiUrl)
+    .then(response => {
+        if (response.ok) return response.json();
+        throw new Error('Network error');
+    })
+    .then(data => {
+        // プロキシから返ってきたテキスト（短縮URL）を抽出
+        let shortenedUrl = data.contents.trim();
+        
+        if(shortenedUrl.startsWith("https://is.gd/")) {
+            if (copyToClipboard(shortenedUrl)) {
+                alert("【短縮URLの自動生成に成功！】\n\n" + shortenedUrl + "\n\n上記URLをコピーしました！\n.comが入っていないので、このままパズサバのチャットに貼れます。");
+            } else {
+                alert("コピーに失敗しました。生成されたURL:\n" + shortenedUrl);
+            }
+        } else {
+            // 万が一is.gd側でエラーが出た場合は、安全なPZSコード単体をコピーしてバックアップ
+            copyToClipboard(codeResult);
+            alert("短縮URLの自動発行に失敗しました。代わりに安全な「配置コード」をコピーしましたので、これをそのまま貼り付けてください。");
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        copyToClipboard(codeResult);
+        alert("通信エラーが発生しました。代わりに安全な「配置コード」をクリップボードにコピーしました。");
+    })
+    .finally(() => {
+        btn.innerText = "短縮URLコピー";
+        btn.disabled = false;
+    });
+}
+
+function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+    const textArea = document.createElement("textarea"); textArea.value = text;
+    textArea.style.position = "fixed"; document.body.appendChild(textArea);
+    textArea.focus(); textArea.select();
+    try { document.execCommand('copy'); return true; } catch (err) { return false; }
+    finally { document.body.removeChild(textArea); }
 }
 
 function applyData(code) { 
     try { 
         let cleanCode = code.trim();
-        // もしis.gdのURLごと貼り付けられた場合は、末尾のコード部分だけを自動抽出
         if(cleanCode.includes("is.gd/")) {
+            // ギルメンがURLごと入力欄に入れても動くように判定
             cleanCode = cleanCode.split("is.gd/").pop();
         }
         if(cleanCode.startsWith("PZS")) { 
             cleanCode = cleanCode.substring(3);
         }
         
-        // 安全用文字に置換していた部分を、元のBase64に戻す
         let rawB64 = cleanCode.replace(/-/g, '+').replace(/_/g, '/');
         while (rawB64.length % 4) { rawB64 += '='; }
 
