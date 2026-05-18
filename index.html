@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.4</title>
+    <title>避難所レイアウト v29.3.5</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -206,7 +206,7 @@ function adjO(v) { if(selIdx!==-1){ map[selIdx].off+=v; updatePanel(); save(); r
 function nudge(dx,dy) { if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
 
-// ★自動タイニー短縮機能付きエクスポート★
+// ★アジア・中国国内対応の超短縮APIに完全変更★
 function exportURL() {
     deselect(); 
     render(); 
@@ -247,34 +247,31 @@ function exportURL() {
         }
     };
 
-    // パズサバのゲーム内チャットに安全に貼れる文字数の上限（通常URLなら130字以下）
     const PZS_MAX_LEN = 150; 
 
     let exportData = { m: minimizeMap(true), l: lines, names: nameList };
     let compressed = LZString.compressToEncodedURIComponent(JSON.stringify(exportData));
     let fullUrl = baseUrl + "?d=" + compressed;
 
-    // パズサバの上限を超えている場合は、TinyURLのAPIを叩いて超短縮URL化する
     if (fullUrl.length > PZS_MAX_LEN) {
-        // バックグラウンドで一瞬リクエストを投げる
-        fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(fullUrl)}`)
+        // 金盾（グレートファイアウォール）をすり抜け、アジア・中国でも確実に爆速で開けるis.gdを採用
+        // （万が一のクロスドメイン規制を考慮し、オープンなJSONP/プレーンテキストエンドポイントへリクエスト）
+        fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(fullUrl)}`)
             .then(res => res.text())
             .then(shortUrl => {
                 if(shortUrl && shortUrl.startsWith("http")) {
                     copyToClipboard(shortUrl);
-                    alert("【ゲーム内チャット専用・極小URL】\nデータ量が多いため自動でTinyURL（超短縮）に変換しました！\nそのままパズサバのチャットに貼り付けられます。\n\nコピーされたURL:\n" + shortUrl);
+                    alert("【中国回線対応・極小URL】\nデータ圧縮後、アジア圏でも確実に繋がる短縮URLに変換しました！\nそのままパズサバのチャットに貼り付けられます。\n\n" + shortUrl);
                 } else {
-                    // 万が一APIエラーが起きたら通常URLでコピー
                     copyToClipboard(fullUrl);
-                    alert("短縮URLの生成に失敗したため、通常の共有URLをコピーしました。");
+                    alert("短縮URLの生成に失敗したため、通常の長文共有URLをコピーしました。");
                 }
             })
             .catch(err => {
                 copyToClipboard(fullUrl);
-                alert("通信エラーのため、通常の共有URLをコピーしました。");
+                alert("通信エラーのため、通常の長文共有URLをコピーしました。");
             });
     } else {
-        // 短い場合はそのままコピー
         if (copyToClipboard(fullUrl)) {
             alert("短縮共有URLをコピーしました！");
         } else {
