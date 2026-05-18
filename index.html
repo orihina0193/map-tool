@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.4</title>
+    <title>避難所レイアウト v29.3.5</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -206,15 +206,22 @@ function adjO(v) { if(selIdx!==-1){ map[selIdx].off+=v; updatePanel(); save(); r
 function nudge(dx,dy) { if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
 
-// 短縮URLが戻ってきた時の処理
-function handleShortURL(response) {
-    const activeScript = document.getElementById('isgd-jsonp');
+// gg.gg短縮成功時のグローバルコールバック
+window.handleGgShortURL = function(response) {
+    const activeScript = document.getElementById('gggg-jsonp');
     if (activeScript) activeScript.remove();
-    // 短縮に成功した場合のみ、クリップボードを短いURLで上書きする
-    if (response && response.shorturl) {
-        navigator.clipboard.writeText(response.shorturl);
+
+    if (response && response.status === 'ok' && response.short_url) {
+        // 短縮成功したらクリップボードを上書きし、完了通知を出す
+        navigator.clipboard.writeText(response.short_url).then(() => {
+            alert("短縮URLのコピーが完了しました！\n" + response.short_url);
+        }).catch(() => {
+            alert("短Short URLが生成されました。コピーしてご利用ください：\n" + response.short_url);
+        });
+    } else {
+        alert("共有URL（通常版）をコピーしました！");
     }
-}
+};
 
 function exportURL() {
     const exportMap = map.map(d => {
@@ -224,18 +231,23 @@ function exportURL() {
     const compressed = LZString.compressToEncodedURIComponent(JSON.stringify({ m: exportMap, l: lines }));
     const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed;
 
-    // 【元の仕様を完全維持】押したその瞬間に、まずは長いURLを確実にコピー！
-    navigator.clipboard.writeText(fullUrl);
+    // タップした瞬間にまず長いURLをクリップボードに保存（保険）
+    navigator.clipboard.writeText(fullUrl).catch(err => console.log('Clipboard fallback active'));
 
-    // 古いJSONP用スクリプトがあれば削除
-    const oldScript = document.getElementById('isgd-jsonp');
+    // 古いJSONPスクリプトがあれば削除
+    const oldScript = document.getElementById('gggg-jsonp');
     if (oldScript) oldScript.remove();
 
-    // バックグラウンドで非同期に短縮URLを取得し、成功したら上書きする
+    // gg.ggのAPI（JSONP対応、かつ.comを含まない）にリクエストを投げる
     const script = document.createElement('script');
-    script.id = 'isgd-jsonp';
-    script.src = `https://is.gd/create.php?format=json&callback=handleShortURL&url=${encodeURIComponent(fullUrl)}`;
-    script.onerror = function() { script.remove(); };
+    script.id = 'gggg-jsonp';
+    script.src = `https://gg.gg/api/v1/links/create?url=${encodeURIComponent(fullUrl)}&callback=handleGgShortURL`;
+    
+    script.onerror = function() {
+        script.remove();
+        alert("共有URL（通常版）をコピーしました！"); // 通信失敗時も長いURLは残るように通知
+    };
+
     document.body.appendChild(script);
 }
 
