@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.9</title>
+    <title>避難所レイアウト v29.3.4</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -206,7 +206,7 @@ function adjO(v) { if(selIdx!==-1){ map[selIdx].off+=v; updatePanel(); save(); r
 function nudge(dx,dy) { if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
 
-// ★外部通信ゼロ！名前を圧縮＆文字数制限に絶対収めるエクスポート関数★
+// ★自動タイニー短縮機能付きエクスポート★
 function exportURL() {
     deselect(); 
     render(); 
@@ -247,33 +247,42 @@ function exportURL() {
         }
     };
 
-    // パズサバのチャット等で安全に送れる目安（圧縮データ単体で130文字程度）
-    const MAX_DATA_LEN = 130; 
+    // パズサバのゲーム内チャットに安全に貼れる文字数の上限（通常URLなら130字以下）
+    const PZS_MAX_LEN = 150; 
 
     let exportData = { m: minimizeMap(true), l: lines, names: nameList };
     let compressed = LZString.compressToEncodedURIComponent(JSON.stringify(exportData));
+    let fullUrl = baseUrl + "?d=" + compressed;
 
-    if (compressed.length > MAX_DATA_LEN) {
-        exportData = { m: minimizeMap(false), l: lines, names: [] };
-        compressed = LZString.compressToEncodedURIComponent(JSON.stringify(exportData));
-        
-        const shortUrl = baseUrl + "?d=" + compressed;
-        if (copyToClipboard(shortUrl)) {
-            alert("【文字数制限クリア】\n過密マップのため、メンバー名を省略して配置データのみを極小URLでコピーしました！\n（外部通信なし・100%成功）");
-        } else {
-            alert("URLのコピーに失敗しました。");
-        }
+    // パズサバの上限を超えている場合は、TinyURLのAPIを叩いて超短縮URL化する
+    if (fullUrl.length > PZS_MAX_LEN) {
+        // バックグラウンドで一瞬リクエストを投げる
+        fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(fullUrl)}`)
+            .then(res => res.text())
+            .then(shortUrl => {
+                if(shortUrl && shortUrl.startsWith("http")) {
+                    copyToClipboard(shortUrl);
+                    alert("【ゲーム内チャット専用・極小URL】\nデータ量が多いため自動でTinyURL（超短縮）に変換しました！\nそのままパズサバのチャットに貼り付けられます。\n\nコピーされたURL:\n" + shortUrl);
+                } else {
+                    // 万が一APIエラーが起きたら通常URLでコピー
+                    copyToClipboard(fullUrl);
+                    alert("短縮URLの生成に失敗したため、通常の共有URLをコピーしました。");
+                }
+            })
+            .catch(err => {
+                copyToClipboard(fullUrl);
+                alert("通信エラーのため、通常の共有URLをコピーしました。");
+            });
     } else {
-        const shortUrl = baseUrl + "?d=" + compressed;
-        if (copyToClipboard(shortUrl)) {
-            alert("短縮共有URLをコピーしました！\n（外部通信なし・100%成功）");
+        // 短い場合はそのままコピー
+        if (copyToClipboard(fullUrl)) {
+            alert("短縮共有URLをコピーしました！");
         } else {
             alert("URLのコピーに失敗しました。");
         }
     }
 }
 
-// ★インデックス化した名前付きURLからデータを復元する関数★
 function applyData(code) { 
     try { 
         const json = LZString.decompressFromEncodedURIComponent(code); 
