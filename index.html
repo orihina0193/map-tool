@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.4</title>
+    <title>避難所レイアウト v29.3.3</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -205,41 +205,7 @@ function adjS(v) { if(selIdx!==-1){ map[selIdx].s = parseFloat((map[selIdx].s+v)
 function adjO(v) { if(selIdx!==-1){ map[selIdx].off+=v; updatePanel(); save(); render(); } }
 function nudge(dx,dy) { if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
-async function exportURL() {
-    try {
-        // マップデータの圧縮処理（ここは共通）
-        const exportMap = map.map(d => {
-            const a = assets[d.aIdx];
-            return { n: a.name || null, x: d.x, y: d.y, s: d.s, off: d.off, ox: d.ox, oy: d.oy, mem: d.mem, src: a.name ? null : a.src };
-        });
-        const compressed = LZString.compressToEncodedURIComponent(JSON.stringify({ m: exportMap, l: lines }));
-        const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed;
-
-        // すでに古いポップアップがあれば消す
-        const oldBox = document.getElementById('shorten-box');
-        if (oldBox) oldBox.remove();
-
-        // ツール内に表示するポップアップ（バナー）を作成
-        const box = document.createElement('div');
-        box.id = 'shorten-box';
-        box.style = "position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#fff; color:#333; padding:20px; border:3px solid #ffcc00; border-radius:10px; z-index:9999; text-align:center; box-shadow:0 4px 15px rgba(0,0,0,0.3); font-family:sans-serif; min-width:280px;";
-        
-        // is.gdの「手動発行ページ」のURLを作成（.comを回避）
-        const shortenerUrl = `https://is.gd/create.php?url=${encodeURIComponent(fullUrl)}`;
-
-        box.innerHTML = `
-            <p style="margin:0 0 15px 0; font-weight:bold; font-size:14px;">ギルチャ用短縮URL（.gd）の発行</p>
-            <a href="${shortenerUrl}" target="_blank" style="display:inline-block; background:#007aff; color:#fff; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold; font-size:14px; margin-bottom:15px;">短縮URLを生成する</a>
-            <br>
-            <button onclick="document.getElementById('shorten-box').remove()" style="background:#ddd; border:none; padding:5px 15px; border-radius:3px; cursor:pointer; font-size:12px;">閉じる</button>
-        `;
-
-        document.body.appendChild(box);
-
-    } catch (e) {
-        alert("URLの生成に失敗しました。");
-    }
-}
+async function exportURL() { const exportMap = map.map(d => { const a = assets[d.aIdx]; return { n: a.name || null, x: d.x, y: d.y, s: d.s, off: d.off, ox: d.ox, oy: d.oy, mem: d.mem, src: a.name ? null : a.src }; }); const compressed = LZString.compressToEncodedURIComponent(JSON.stringify({ m: exportMap, l: lines })); const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed; try { const res = await fetch(`https://is.gd/create.php?format=json&url=${encodeURIComponent(fullUrl)}`); const data = await res.json(); navigator.clipboard.writeText(data.shorturl || fullUrl); alert("URLをコピーしました"); } catch (e) { navigator.clipboard.writeText(fullUrl); alert("URLをコピーしました"); } }
 function applyData(code) { try { const json = LZString.decompressFromEncodedURIComponent(code); const d = JSON.parse(json); lines = d.l || []; map = d.m.map(item => { let aIdx = assets.findIndex(a => a.name === item.n); if(aIdx === -1 && item.src) { const img = new Image(); img.src = item.src; assets.push({ img, src: item.src, name: null, defS: 1, defO: 0, gw: 1, gh: 1, ox: 0, oy: 0 }); addThumb(assets.length - 1); aIdx = assets.length - 1; } return { id: Date.now()+Math.random(), x: item.x, y: item.y, aIdx: aIdx===-1?0:aIdx, s: item.s, off: item.off, ox: item.ox, oy: item.oy, mem: item.mem || "" }; }); save(); render(); } catch(e) {} }
 function crop(img) { const c = document.createElement('canvas'), t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } const w = x2-x1+1, h = y2-y1+1, c2 = document.createElement('canvas'); c2.width = w; c2.height = h; c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
 init();
