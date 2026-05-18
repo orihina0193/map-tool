@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.4</title>
+    <title>避難所レイアウト v29.3.5</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -206,7 +206,6 @@ function adjO(v) { if(selIdx!==-1){ map[selIdx].off+=v; updatePanel(); save(); r
 function nudge(dx,dy) { if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
 
-// ★ulvis.net版に修正したexportURL関数★
 async function exportURL() {
     deselect(); 
     render(); 
@@ -234,12 +233,13 @@ async function exportURL() {
     };
 
     try {
-        // ulvis.netのAPI（CORS制限がないため、中継サーバー無しでPC・スマホ直接通信可能）
-        const res = await fetch(`https://ulvis.net/api.php?url=${encodeURIComponent(fullUrl)}&private=1`);
+        // da.gd のAPI（短くて、長いURLの許容量が大きいサービス）
+        const res = await fetch(`https://da.gd/s?url=${encodeURIComponent(fullUrl)}`);
         
-        if (!res.ok) throw new Error('ulvis failed');
+        if (!res.ok) throw new Error('da.gd failed');
         
-        const shortUrl = await res.text();
+        let shortUrl = await res.text();
+        shortUrl = shortUrl.trim(); // 余計な改行などを削る
         
         if (shortUrl && shortUrl.startsWith('http')) {
             await copyToClipboard(shortUrl);
