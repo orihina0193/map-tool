@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.5</title>
+    <title>避難所レイアウト v29.3.6</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -233,13 +233,15 @@ async function exportURL() {
     };
 
     try {
-        // da.gd のAPI（短くて、長いURLの許容量が大きいサービス）
-        const res = await fetch(`https://da.gd/s?url=${encodeURIComponent(fullUrl)}`);
+        // 大手マカフィーも安全と認める is.gd を使用
+        // PCでのエラーを防ぐために、パブリックな中継プロキシ（cors-proxy.htm.im）を経由させます
+        const targetUrl = `https://is.gd/create.php?format=simple&url=${encodeURIComponent(fullUrl)}`;
+        const res = await fetch(`https://cors-proxy.htm.im/${targetUrl}`);
         
-        if (!res.ok) throw new Error('da.gd failed');
+        if (!res.ok) throw new Error('is.gd failed');
         
         let shortUrl = await res.text();
-        shortUrl = shortUrl.trim(); // 余計な改行などを削る
+        shortUrl = shortUrl.trim();
         
         if (shortUrl && shortUrl.startsWith('http')) {
             await copyToClipboard(shortUrl);
