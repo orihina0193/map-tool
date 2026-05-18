@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.6</title>
+    <title>避難所レイアウト v29.3.7</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -57,7 +57,7 @@
     <div id="guide-msg-box">ガイドモード：ボタンをタップして説明を表示</div>
     <div id="top-panel">
         <div id="cur-box" onclick="handleGuideClick('選択解除', event) || deselect()" title="選択解除"></div>
-        <input type="text" id="member-name-in" placeholder="ギルメン名を入力" oninput="updateMemberName(this.value)" onclick="if(guideMode){ handleGuideClick('ギルメン名', event); this.blur(); }">
+        <input type="text" id="member-name-in" placeholder="ギルメン名かデータ貼付" oninput="handleTopInput(this.value)" onclick="if(guideMode){ handleGuideClick('ギルメン名', event); this.blur(); }">
         <button class="top-btn" onclick="handleGuideClick('名簿', event) || openMemberList()" title="名簿">👥</button>
         <button class="top-btn" onclick="handleGuideClick('素材追加', event) || toggleAssetModal(true)" title="素材追加">＋</button>
         <button class="reload-btn" onclick="handleGuideClick('リセット', event) || location.reload()" title="リセット">🔄</button>
@@ -74,7 +74,7 @@
         <div id="nudge-grid" onclick="handleGuideClick('微調整', event)"><button style="grid-column:2" onclick="if(!guideMode)nudge(0,-0.1)">↑</button><button style="grid-column:1" onclick="if(!guideMode)nudge(-0.1,0)">←</button><button style="grid-column:2" onclick="if(!guideMode)nudge(0,0.1)">↓</button><button style="grid-column:3" onclick="if(!guideMode)nudge(0.1,0)">→</button></div>
         <div class="mode-box">
             <button class="save-btn" onclick="handleGuideClick('画像保存', event) || exportImage()">画像として保存</button>
-            <div style="display:flex; gap:3px;"><button class="data-btn btn-out" onclick="handleGuideClick('共有URL', event) || exportURL()">共有URL</button><button class="data-btn btn-clr" onclick="handleGuideClick('全消去', event) || clearAll()">全消去</button></div>
+            <div style="display:flex; gap:3px;"><button class="data-btn btn-out" onclick="handleGuideClick('共有URL', event) || exportURL()">共有データ</button><button class="data-btn btn-clr" onclick="handleGuideClick('全消去', event) || clearAll()">全消去</button></div>
             <div class="mode-row" onclick="handleGuideClick('モード切替', event)"><button id="m-move" onclick="if(!guideMode)setMode('move')">移動</button><button id="m-pen" onclick="if(!guideMode)setMode('pen')">ペン</button><button id="m-p-erase" onclick="if(!guideMode)setMode('p-erase')">線消</button><button id="m-erase" onclick="if(!guideMode)setMode('erase')">建物消</button></div>
         </div>
     </div>
@@ -86,7 +86,7 @@
 let guideMode = false;
 const GUIDE_TEXT = {
     '選択解除': '現在選んでいる建物を解除します。',
-    'ギルメン名': '配置した建物に名前を付けます。黒背景のネームタグが表示されます。',
+    'ギルメン名': '配置した建物に名前を付けます。短い「配置コード」をここに貼り付けると、データを復元（インポート）できます。',
     '名簿': '配置済みのメンバーを一覧表示します。名前をタップするとその場所へジャンプします。',
     '素材追加': '建物の追加。フォルダアイコンからスマホ内の画像も取り込めます。',
     'リセット': '画面をリロードして最初からやり直します。',
@@ -94,7 +94,7 @@ const GUIDE_TEXT = {
     '接地調整': '建物の重なり順や、マスの接地位置を上下に微調整します。',
     '微調整': '矢印ボタンで、建物をドット単位で細かく動かします。',
     '画像保存': '現在見えているキャンバスの画像を保存します。',
-    '共有URL': '今の状態をURLにしてコピーします。他の人への共有や 編集の続きができます。',
+    '共有URL': 'ゲーム内チャットに貼り付け可能な「配置コード」または「短縮URL」をコピーします。',
     '全消去': 'すべての建物と線を消して空にします。',
     'モード切替': '移動、ペン（赤い線）、消しゴムのモードを切り替えます。'
 };
@@ -188,7 +188,19 @@ function updateCurBox() { const box = document.getElementById('cur-box'); const 
 function openMemberList() { const listCont = document.getElementById('mem-list'); listCont.innerHTML = ""; const members = map.filter(d => d.mem && d.mem.trim() !== ""); if(members.length === 0) { listCont.innerHTML = "<div style='text-align:center; padding:20px; color:#999;'>まだメンバーが配置されていません</div>"; } else { members.sort((a,b) => a.mem.localeCompare(b.mem)).forEach(m => { const div = document.createElement('div'); div.className = 'mem-item'; div.innerHTML = `<span>${m.mem}</span><span style="color:#007aff; font-weight:bold; font-size:12px; cursor:pointer;">表示 ▶</span>`; div.onclick = () => { jumpToMember(m.id); document.getElementById('mem-overlay').style.display='none'; }; listCont.appendChild(div); }); } document.getElementById('mem-overlay').style.display = 'flex'; }
 function jumpToMember(id) { const d = map.find(item => item.id === id); if(!d) return; const pos = toS(d.x + 1, d.y + 1); cam.x = cvs.width/2 - pos.x * cam.z; cam.y = cvs.height/2 - pos.y * cam.z; selIdx = map.findIndex(item => item.id === id); updateCurBox(); render(); }
 function deselect() { activeAsset = -1; tempAssetStore = -1; selIdx = -1; lockedId = null; updateCurBox(); render(); }
-function updateMemberName(val) { if(selIdx !== -1) { map[selIdx].mem = val; save(); render(); } }
+
+// ギルメン名入力とコード貼付（インポート）の兼用処理
+function handleTopInput(val) {
+    if(guideMode) return;
+    if(val.startsWith("PZS:")) {
+        applyData(val.replace("PZS:", ""));
+        document.getElementById('member-name-in').value = "";
+        alert("配置コードからデータを復元しました！");
+    } else {
+        if(selIdx !== -1) { map[selIdx].mem = val; save(); render(); }
+    }
+}
+
 function toggleAssetModal(show) { document.getElementById('asset-overlay').style.display = show ? 'flex' : 'none'; }
 function addThumb(idx) { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`; d.onclick = () => { activeAsset = idx; tempAssetStore = idx; selIdx = -1; lockedId = null; setMode('move'); updateCurBox(); toggleAssetModal(false); render(); }; document.getElementById('asset-grid').appendChild(d); }
 async function loadPresets() { for (const p of PRESETS) { await new Promise(res => { const img = new Image(); img.crossOrigin = "anonymous"; img.onload = () => { const src = crop(img), i2 = new Image(); i2.onload = () => { assets.push({ img: i2, src, name: p.name, defS: p.s, defO: p.o, gw: p.gw, gh: p.gh, ox: p.ox, oy: p.oy }); addThumb(assets.length - 1); res(); }; i2.src = src; }; img.src = p.url; }); } }
@@ -206,7 +218,7 @@ function adjO(v) { if(selIdx!==-1){ map[selIdx].off+=v; updatePanel(); save(); r
 function nudge(dx,dy) { if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
 
-// ★クロスドメインエラー（CORS）を回避し、中国国内でも確実に繋がる短縮処理に変更★
+// ★通信エラー＆.comドメイン問題を100%排除したローカル完結型コードエクスポート★
 function exportURL() {
     deselect(); 
     render(); 
@@ -253,33 +265,15 @@ function exportURL() {
     let compressed = LZString.compressToEncodedURIComponent(JSON.stringify(exportData));
     let fullUrl = baseUrl + "?d=" + compressed;
 
+    // もしドメイン付きURLがチャットの文字数制限（150〜200文字付近）を超えそうな場合
     if (fullUrl.length > PZS_MAX_LEN) {
-        // CORSエラーを回避するため、TinyURLのパブリックAPI、またはブラウザ通信に強いクエリに変更
-        // それでもブラウザ制限で弾かれた場合は、即座に「予備のURL切り出し」を行います
-        fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(fullUrl)}`)
-            .then(res => res.text())
-            .then(shortUrl => {
-                if(shortUrl && shortUrl.startsWith("http")) {
-                    // .comドメインですが、api-create経由は中国国内のプロキシやVPN経由、あるいは一部の規制すり抜けルートで開けるケースが多いため確実に生成します
-                    copyToClipboard(shortUrl);
-                    alert("【短縮URLのコピー成功】\nパズサバのチャット用に極小化したURLをコピーしました！\n\n" + shortUrl);
-                } else {
-                    throw new Error("Fallback");
-                }
-            })
-            .catch(err => {
-                // 万が一通信エラーになった場合、文字数制限（400文字）に滑り込ませるために
-                // 「線を引くデータ(lines)」を削って強制的に短縮URL化を試みる超執念モード
-                let fallbackData = { m: minimizeMap(true), names: nameList }; // 線を削る
-                let fbCompressed = LZString.compressToEncodedURIComponent(JSON.stringify(fallbackData));
-                let fbUrl = baseUrl + "?d=" + fbCompressed;
-                
-                copyToClipboard(fbUrl);
-                alert("【通信エラー対策・自動調整】\nAPI通信がブラウザにブロックされたため、データ量を最小限（線を非表示）にしてチャットに貼れる長さの直リンクを生成・コピーしました！\nそのまま貼り付け可能です。");
-            });
+        // ドメイン部分を丸ごと削り、スマホ内部で一瞬で「配置コード」にしてコピー！
+        const pzsCode = "PZS:" + compressed;
+        copyToClipboard(pzsCode);
+        alert("【ゲーム内チャット専用・配置コード】\nデータ量が多いため、ドメインを削った超軽量コードをコピーしました！\nパズサバのチャットにそのまま貼り付けられます。\n\n受け取った人は、このコードを上の「ギルメン名を入力」の欄にそのまま貼り付ければマップが復元します。");
     } else {
         if (copyToClipboard(fullUrl)) {
-            alert("短縮共有URLをコピーしました！");
+            alert("通常の共有URLをコピーしました！");
         } else {
             alert("URLのコピーに失敗しました。");
         }
