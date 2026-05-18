@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.3</title>
+    <title>避難所レイアウト v29.3.4</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -206,7 +206,7 @@ function adjO(v) { if(selIdx!==-1){ map[selIdx].off+=v; updatePanel(); save(); r
 function nudge(dx,dy) { if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
 
-// ★修正対象のexportURL関数★
+// ★ulvis.net版に修正したexportURL関数★
 async function exportURL() {
     deselect(); 
     render(); 
@@ -227,34 +227,30 @@ async function exportURL() {
             textArea.value = text;
             textArea.style.position = "fixed";
             document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
+            textArea.focus(); textArea.select();
             try { document.execCommand('copy'); document.body.removeChild(textArea); return Promise.resolve(); }
             catch (err) { document.body.removeChild(textArea); return Promise.reject(err); }
         }
     };
 
     try {
-        // パブリックプロキシ（allorigins）を経由させて、PCブラウザのCORS制限によるアクセス拒否を回避
-        const targetApi = `https://is.gd/create.php?format=json&url=${encodeURIComponent(fullUrl)}`;
-        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(targetApi)}`);
+        // ulvis.netのAPI（CORS制限がないため、中継サーバー無しでPC・スマホ直接通信可能）
+        const res = await fetch(`https://ulvis.net/api.php?url=${encodeURIComponent(fullUrl)}&private=1`);
         
-        if (!res.ok) throw new Error('is.gd failed');
+        if (!res.ok) throw new Error('ulvis failed');
         
-        const jsonWrapper = await res.json();
-        const data = JSON.parse(jsonWrapper.contents);
+        const shortUrl = await res.text();
         
-        if (data.shorturl) {
-            await copyToClipboard(data.shorturl);
+        if (shortUrl && shortUrl.startsWith('http')) {
+            await copyToClipboard(shortUrl);
             alert("短縮URLをコピーしました！");
             return;
         }
-        throw new Error('No shorturl');
+        throw new Error('Invalid URL');
     } catch (e) {
-        // 万が一中継サーバーが落ちていた場合のみ、バックアップとして長いURLをコピー
         try {
             await copyToClipboard(fullUrl);
-            alert("共有URLをコピーしました！\n（短縮APIへの通信がブロックされたため、通常のURLをコピーしました）");
+            alert("共有URLをコピーしました！\n（短縮に失敗したため、通常のURLをコピーしました）");
         } catch (err) {
             alert("URLのコピーに失敗しました。");
         }
