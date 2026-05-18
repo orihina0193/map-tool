@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>避難所レイアウト v29.3.6</title>
+    <title>避難所レイアウト v29.3.7</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <style>
         :root { --panel-h: 250px; --panel-w: 220px; }
@@ -233,20 +233,22 @@ async function exportURL() {
     };
 
     try {
-        // 大手マカフィーも安全と認める is.gd を使用
-        // PCでのエラーを防ぐために、パブリックな中継プロキシ（cors-proxy.htm.im）を経由させます
+        // 大手で超安定している allorigins プロキシを経由して is.gd で短縮
         const targetUrl = `https://is.gd/create.php?format=simple&url=${encodeURIComponent(fullUrl)}`;
-        const res = await fetch(`https://cors-proxy.htm.im/${targetUrl}`);
+        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`);
         
-        if (!res.ok) throw new Error('is.gd failed');
+        if (!res.ok) throw new Error('Proxy failed');
         
-        let shortUrl = await res.text();
-        shortUrl = shortUrl.trim();
+        const data = await res.json();
+        let shortUrl = data.contents; // alloriginsは contents の中に結果が入ります
         
-        if (shortUrl && shortUrl.startsWith('http')) {
-            await copyToClipboard(shortUrl);
-            alert("短縮URLをコピーしました！");
-            return;
+        if (shortUrl) {
+            shortUrl = shortUrl.trim();
+            if (shortUrl.startsWith('http')) {
+                await copyToClipboard(shortUrl);
+                alert("短縮URLをコピーしました！");
+                return;
+            }
         }
         throw new Error('Invalid URL');
     } catch (e) {
