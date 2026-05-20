@@ -82,7 +82,43 @@
 
 <div id="export-overlay" onclick="this.style.display='none'"><img id="export-img"></div>
 
+<div id="alert-overlay" class="overlay" onclick="if(event.target==this)this.style.display='none'">
+    <div class="modal" style="width: 280px; text-align: center; gap: 15px; margin: auto; padding: 20px; background:#fff; border-radius:12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); display: flex; flex-direction: column;">
+        <div class="modal-title" style="border:none; padding:0; margin:0; font-size:16px;">お知らせ</div>
+        <div id="alert-msg" style="font-size: 14px; line-height: 1.5; color: #333; white-space: pre-wrap; padding: 10px 0; text-align: center;"></div>
+        <button class="save-btn" style="height: 38px; width: 100%; max-width: 100%;" onclick="document.getElementById('alert-overlay').style.display='none'">OK</button>
+    </div>
+</div>
+
+<div id="confirm-overlay" class="overlay" onclick="if(event.target==this)this.style.display='none'">
+    <div class="modal" style="width: 280px; text-align: center; gap: 15px; margin: auto; padding: 20px; background:#fff; border-radius:12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); display: flex; flex-direction: column;">
+        <div class="modal-title" style="border:none; padding:0; margin:0; font-size:16px;">確認</div>
+        <div id="confirm-msg" style="font-size: 14px; line-height: 1.5; color: #333; white-space: pre-wrap; padding: 10px 0; text-align: center;"></div>
+        <div style="display: flex; gap: 10px; width: 100%;">
+            <button id="confirm-yes-btn" class="data-btn btn-clr" style="height: 38px; flex: 1;">消去する</button>
+            <button id="confirm-no-btn" class="data-btn" style="height: 38px; flex: 1; background: #8e8e93;">キャンセル</button>
+        </div>
+    </div>
+</div>
+
 <script>
+window.alert = function(msg) {
+    document.getElementById('alert-msg').innerText = msg;
+    document.getElementById('alert-overlay').style.display = 'flex';
+};
+
+function showConfirm(msg, onYes) {
+    document.getElementById('confirm-msg').innerText = msg;
+    document.getElementById('confirm-overlay').style.display = 'flex';
+    document.getElementById('confirm-yes-btn').onclick = () => {
+        onYes();
+        document.getElementById('confirm-overlay').style.display = 'none';
+    };
+    document.getElementById('confirm-no-btn').onclick = () => {
+        document.getElementById('confirm-overlay').style.display = 'none';
+    };
+}
+
 let guideMode = false;
 const GUIDE_TEXT = {
     '選択解除': '現在選んでいる建物を解除します。',
@@ -132,7 +168,7 @@ const T_W = 64, T_H = 32;
 let cam = { x: 0, y: 0, z: 1 }, assets = [], map = [], lines = [], selIdx = -1, activeAsset = -1, mode = 'move';
 let drag = false, pinch = false, lockedId = null, penStart = null, penCurrent = null, lastT = {x: 0, y: 0}, lastDist = 0, tempAssetStore = -1;
 
-function init() { window.addEventListener('resize', resize); resize(); cam.x = cvs.width/2; cam.y = cvs.height/3; loadPresets().then(() => { const params = new URLSearchParams(window.location.search); const urlData = params.get('d'); if (urlData) applyData(urlData); else load(); render(); }); setupEvents(); }
+function init() { window.addEventListener('resize', resize); resize(); cam.x = cvs.width/2; cam.y = cvs.height/3; loadPresets().then(() => { const params = new URLSearchParams(window.location.search); const urlData = params.get('d'); const layoutId = params.get('id'); if (layoutId) { fetch(`/api/layout/${layoutId}`).then(res => { if (!res.ok) throw new Error(); return res.json(); }).then(data => { if (data && data.d) { applyData(data.d); } else { load(); } render(); }).catch(() => { alert("短縮URLのロードに失敗したため、ローカルの保存データを読み込みました。"); load(); render(); }); } else if (urlData) { applyData(urlData); render(); } else { load(); render(); } }); setupEvents(); }
 function zoom(scaleChange, centerX, centerY) { const newZ = Math.min(Math.max(cam.z * scaleChange, 0.1), 5); const ratio = newZ / cam.z; cam.x = centerX - (centerX - cam.x) * ratio; cam.y = centerY - (centerY - cam.y) * ratio; cam.z = newZ; }
 function drawTerritory(gx, gy, range, color) { ctx.fillStyle = color; ctx.beginPath(); const p1 = toS(gx - range, gy - range), p2 = toS(gx + range + 1, gy - range), p3 = toS(gx + range + 1, gy + range + 1), p4 = toS(gx - range, gy + range + 1); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y); ctx.closePath(); ctx.fill(); ctx.strokeStyle = "rgba(0,122,255,0.3)"; ctx.lineWidth = 1/cam.z; ctx.stroke(); }
 
@@ -140,14 +176,14 @@ function render() {
     ctx.clearRect(0,0,cvs.width,cvs.height); ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.z, cam.z);
     ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1/cam.z;
     for(let i=-20; i<=40; i++){ let s = toS(i,-20), e = toS(i,40); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke(); s = toS(-20,i); e = toS(40,i); ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(e.x,e.y); ctx.stroke(); }
-    map.forEach(d => { const a = assets[d.aIdx]; if (a.name === "OP") drawTerritory(Math.round(d.x), Math.round(d.y), 5, "rgba(0, 122, 255, 0.12)"); else if (a.name === "DOOM") drawTerritory(Math.round(d.x) + 1, Math.round(d.y) + 1, 6, "rgba(0, 122, 255, 0.12)"); });
+    map.forEach(d => { const a = assets[d.aIdx]; if (!a) return; if (a.name === "OP") drawTerritory(Math.round(d.x), Math.round(d.y), 5, "rgba(0, 122, 255, 0.12)"); else if (a.name === "DOOM") drawTerritory(Math.round(d.x) + 1, Math.round(d.y) + 1, 6, "rgba(0, 122, 255, 0.12)"); });
     lines.forEach(l => { ctx.beginPath(); ctx.strokeStyle = "rgba(255,0,0,0.6)"; ctx.lineWidth = 4/cam.z; const s = toS(l.x1, l.y1), e = toS(l.x2, l.y2); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke(); });
     const sorted = [...map].sort((a,b)=>(Math.round(a.x)+Math.round(a.y))-(Math.round(b.x)+Math.round(b.y)));
     sorted.forEach((d) => {
         const a = assets[d.aIdx]; if(!a) return; const w = T_W * d.s, h = (a.img.height/a.img.width) * w, anchor = toS(d.x + a.gw + d.ox, d.y + a.gh + d.oy); ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + d.off, w, h);
         if(lockedId === d.id || (activeAsset === -1 && selIdx !== -1 && map[selIdx].id === d.id)) { ctx.strokeStyle = "#007aff"; ctx.lineWidth = (lockedId ? 1 : 3)/cam.z; const gx = Math.round(d.x), gy = Math.round(d.y), pS = toS(gx+a.gw, gy+a.gh), pW = toS(gx, gy+a.gh), pE = toS(gx+a.gw, gy), pN = toS(gx, gy); ctx.beginPath(); ctx.moveTo(pS.x,pS.y); ctx.lineTo(pW.x,pW.y); ctx.lineTo(pN.x,pN.y); ctx.lineTo(pE.x,pE.y); ctx.closePath(); ctx.stroke(); }
     });
-    sorted.forEach((d) => { if (!d.mem) return; const a = assets[d.aIdx]; ctx.save(); const fVal = 9.5 * d.s, pVal = 3.2 * d.s, rVal = 2.2 * d.s; ctx.font = `bold ${fVal}px sans-serif`; const pos = toS(d.x + (a.gw / 2), d.y + (a.gh / 2)); const txtW = ctx.measureText(d.mem).width; const bgW = txtW + (pVal * 2), bgH = fVal + pVal; ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.beginPath(); ctx.roundRect(pos.x - bgW/2, pos.y - bgH/2, bgW, bgH, rVal); ctx.fill(); ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(d.mem, pos.x, pos.y); ctx.restore(); });
+    sorted.forEach((d) => { if (!d.mem) return; const a = assets[d.aIdx]; ctx.save(); const fVal = 9.5 * d.s, pVal = 3.2 * d.s, rVal = 2.2 * d.s; ctx.font = `bold ${fVal}px sans-serif`; const pos = toS(d.x + (a.gw / 2), d.y + (a.gh / 2)); const txtW = ctx.measureText(d.mem).width; const bgW = txtW + (pVal * 2), bgH = fVal + pVal; ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(pos.x - bgW/2, pos.y - bgH/2, bgW, bgH, rVal); else ctx.rect(pos.x - bgW/2, pos.y - bgH/2, bgW, bgH); ctx.fill(); ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(d.mem, pos.x, pos.y); ctx.restore(); });
     if(mode === 'pen' && penStart && penCurrent) { ctx.beginPath(); ctx.setLineDash([6/cam.z, 3/cam.z]); ctx.strokeStyle = "rgba(255, 0, 0, 0.8)"; ctx.lineWidth = 2/cam.z; const s = toS(penStart.x, penStart.y), e = toS(penCurrent.x, penCurrent.y); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke(); }
     ctx.restore();
 }
@@ -156,10 +192,12 @@ function exportImage() { deselect(); render(); const tempCvs = document.createEl
 
 function handleStart(x, y) {
     if (guideMode) return;
-    const rawG = toG(x, y), gx_o = Math.floor(rawG.x), gy_o = Math.floor(rawG.y), gx_p = Math.round(rawG.x), gy_p = Math.round(rawG.y);
+    const rect = cvs.getBoundingClientRect();
+    const sx = x - rect.left, sy = y - rect.top;
+    const rawG = toG(sx, sy), gx_o = Math.floor(rawG.x), gy_o = Math.floor(rawG.y), gx_p = Math.round(rawG.x), gy_p = Math.round(rawG.y);
     if(mode === 'pen') { penStart = {x:gx_p, y:gy_p}; penCurrent = {x:gx_p, y:gy_p}; render(); return; }
     if(mode === 'p-erase') { const distToSeg = (p, v, w) => { const l2 = Math.pow(v.x-w.x,2) + Math.pow(v.y-w.y,2); if(l2 === 0) return Math.hypot(p.x-v.x, p.y-v.y); let t = Math.max(0, Math.min(1, ((p.x-v.x)*(w.x-v.x) + (p.y-v.y)*(w.y-v.y)) / l2)); return Math.hypot(p.x-(v.x+t*(w.x-v.x)), p.y-(v.y+t*(w.y-v.y))); }; lines = lines.filter(l => distToSeg(rawG, {x:l.x1, y:l.y1}, {x:l.x2, y:l.y2}) > 0.5); save(); render(); return; }
-    let hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return rawG.x >= d.x && rawG.x < d.x + a.gw && rawG.y >= d.y && rawG.y < d.y + a.gh; });
+    let hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; if (!a) return false; return rawG.x >= d.x && rawG.x < d.x + a.gw && rawG.y >= d.y && rawG.y < d.y + a.gh; });
     if(mode === 'erase' && hitIdx !== -1) { map.splice(hitIdx, 1); selIdx = -1; save(); updateCurBox(); render(); return; }
     if(mode === 'move') {
         if(hitIdx !== -1) { if(activeAsset !== -1) tempAssetStore = activeAsset; activeAsset = -1; selIdx = hitIdx; lockedId = map[selIdx].id; updateCurBox(); updatePanel(); render(); return; }
@@ -171,16 +209,31 @@ function handleStart(x, y) {
         selIdx = -1; lockedId = null; drag = true; updateCurBox(); render();
     }
 }
-function handleMove(x, y, dx, dy) { const rawG = toG(x, y); if(mode === 'pen' && penStart) { penCurrent = {x: Math.round(rawG.x), y: Math.round(rawG.y)}; render(); return; } if(lockedId) { const dIdx = map.findIndex(d => d.id === lockedId); if(dIdx !== -1) { const d = map[dIdx], a = assets[d.aIdx], nx = Math.floor(rawG.x) - (a.gw-1), ny = Math.floor(rawG.y) - (a.gh-1); if(!isBlocked(nx, ny, a.gw, a.gh, d.id)) { d.x = nx; d.y = ny; selIdx = dIdx; save(); } } } else if(drag) { cam.x += dx; cam.y += dy; } render(); }
+function handleMove(x, y, dx, dy) { 
+    const rect = cvs.getBoundingClientRect();
+    const sx = x - rect.left, sy = y - rect.top;
+    const rawG = toG(sx, sy); 
+    if(mode === 'pen' && penStart) { penCurrent = {x: Math.round(rawG.x), y: Math.round(rawG.y)}; render(); return; } 
+    if(lockedId) { 
+        const dIdx = map.findIndex(d => d.id === lockedId); 
+        if(dIdx !== -1) { 
+            const d = map[dIdx], a = assets[d.aIdx], nx = Math.floor(rawG.x) - (a.gw-1), ny = Math.floor(rawG.y) - (a.gh-1); 
+            if(!isBlocked(nx, ny, a.gw, a.gh, d.id)) { d.x = nx; d.y = ny; selIdx = dIdx; save(); } 
+        } 
+    } else if(drag) { 
+        cam.x += dx; cam.y += dy; 
+    } 
+    render(); 
+}
 function handleEnd() { if(mode === 'pen' && penStart && penCurrent && (penStart.x !== penCurrent.x || penStart.y !== penCurrent.y)) { lines.push({x1:penStart.x, y1:penStart.y, x2:penCurrent.x, y2:penCurrent.y}); save(); } drag = pinch = false; lockedId = null; penStart = null; penCurrent = null; render(); }
 
 function setupEvents() {
     cvs.addEventListener('mousedown', e => { if(guideMode) return; lastT = {x: e.clientX, y: e.clientY}; handleStart(e.clientX, e.clientY); });
     window.addEventListener('mousemove', e => { if(guideMode) return; if(drag || lockedId || (mode==='pen' && penStart)) { handleMove(e.clientX, e.clientY, e.clientX-lastT.x, e.clientY-lastT.y); lastT = {x: e.clientX, y: e.clientY}; } });
     window.addEventListener('mouseup', handleEnd);
-    cvs.addEventListener('wheel', e => { if(guideMode) return; e.preventDefault(); zoom(e.deltaY > 0 ? 0.9 : 1.1, e.clientX, e.clientY); render(); }, {passive: false});
+    cvs.addEventListener('wheel', e => { if(guideMode) return; e.preventDefault(); const rect = cvs.getBoundingClientRect(); zoom(e.deltaY > 0 ? 0.9 : 1.1, e.clientX - rect.left, e.clientY - rect.top); render(); }, {passive: false});
     cvs.addEventListener('touchstart', e => { if(guideMode) return; if(e.touches.length >= 2) { pinch = true; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); return; } const t = e.touches[0]; lastT = {x: t.clientX, y: t.clientY}; handleStart(t.clientX, t.clientY); }, {passive: false});
-    cvs.addEventListener('touchmove', e => { if(guideMode) return; e.preventDefault(); if(pinch && e.touches.length >= 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); zoom(d / lastDist, (e.touches[0].clientX + e.touches[1].clientX) / 2, (e.touches[0].clientY + e.touches[1].clientY) / 2); lastDist = d; } else if(!pinch) { const t = e.touches[0]; handleMove(t.clientX, t.clientY, t.clientX-lastT.x, t.clientY-lastT.y); lastT = {x: t.clientX, y: t.clientY}; } render(); }, {passive: false});
+    cvs.addEventListener('touchmove', e => { if(guideMode) return; e.preventDefault(); const rect = cvs.getBoundingClientRect(); if(pinch && e.touches.length >= 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); zoom(d / lastDist, ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left, ((e.touches[0].clientY + e.touches[1].clientY) / 2) - rect.top); lastDist = d; } else if(!pinch) { const t = e.touches[0]; handleMove(t.clientX, t.clientY, t.clientX-lastT.x, t.clientY-lastT.y); lastT = {x: t.clientX, y: t.clientY}; } render(); }, {passive: false});
     cvs.addEventListener('touchend', handleEnd);
 }
 
@@ -191,8 +244,32 @@ function deselect() { activeAsset = -1; tempAssetStore = -1; selIdx = -1; locked
 function updateMemberName(val) { if(selIdx !== -1) { map[selIdx].mem = val; save(); render(); } }
 function toggleAssetModal(show) { document.getElementById('asset-overlay').style.display = show ? 'flex' : 'none'; }
 function addThumb(idx) { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = `url(${assets[idx].src})`; d.onclick = () => { activeAsset = idx; tempAssetStore = idx; selIdx = -1; lockedId = null; setMode('move'); updateCurBox(); toggleAssetModal(false); render(); }; document.getElementById('asset-grid').appendChild(d); }
-async function loadPresets() { for (const p of PRESETS) { await new Promise(res => { const img = new Image(); img.crossOrigin = "anonymous"; img.onload = () => { const src = crop(img), i2 = new Image(); i2.onload = () => { assets.push({ img: i2, src, name: p.name, defS: p.s, defO: p.o, gw: p.gw, gh: p.gh, ox: p.ox, oy: p.oy }); addThumb(assets.length - 1); res(); }; i2.src = src; }; img.src = p.url; }); } }
-function handleFiles(files) { for (const f of files) { const reader = new FileReader(); reader.onload = e => { const img = new Image(); img.onload = () => { const src = crop(img), i2 = new Image(); i2.onload = () => { assets.push({ img: i2, src, name: null, defS: 1, defO: 0, gw: 1, gh: 1, ox: 0, oy: 0 }); addThumb(assets.length - 1); }; i2.src = src; }; img.src = e.target.result; }; reader.readAsDataURL(f); } }
+
+// High-speed Proxy enabled preset texture loaders
+async function loadPresets() { 
+    for (const p of PRESETS) { 
+        await new Promise(res => { 
+            const img = new Image(); 
+            img.crossOrigin = "anonymous"; 
+            img.onload = () => { 
+                const src = crop(img), i2 = new Image(); 
+                i2.onload = () => { 
+                    assets.push({ img: i2, src, name: p.name, defS: p.s, defO: p.o, gw: p.gw, gh: p.gh, ox: p.ox, oy: p.oy }); 
+                    addThumb(assets.length - 1); 
+                    res(); 
+                }; 
+                i2.src = src; 
+            }; 
+            img.onerror = () => {
+                // Secondary absolute fallback to avoid blocking
+                res();
+            };
+            img.src = '/api/proxy-image?url=' + encodeURIComponent(p.url); 
+        }); 
+    } 
+}
+
+function handleFiles(files) { for (const f of files) { const reader = new FileReader(); reader.onload = e => { const img = new Image(); img.onload = () => { const src = crop(img), i2 = new Image(); i2.onload = () => { assets.push({ img: i2, src: e.target.result, name: null, defS: 1, defO: 0, gw: 1, gh: 1, ox: 0, oy: 0 }); addThumb(assets.length - 1); }; i2.src = src; }; img.src = e.target.result; }; reader.readAsDataURL(f); } }
 function setMode(m) { mode = m; document.querySelectorAll('.mode-row button').forEach(b => b.classList.remove('active')); if(document.getElementById(`m-${m}`)) document.getElementById(`m-${m}`).classList.add('active'); render(); }
 function save() { localStorage.setItem('map_v293', JSON.stringify({m:map, l:lines})); }
 function load() { const s = localStorage.getItem('map_v293'); if(s) { const d = JSON.parse(s); map = d.m || []; lines = d.l || []; } }
@@ -204,10 +281,106 @@ function updatePanel() { if(selIdx!==-1){ document.getElementById('size-s').valu
 function adjS(v) { if(selIdx!==-1){ map[selIdx].s = parseFloat((map[selIdx].s+v).toFixed(2)); updatePanel(); save(); render(); } }
 function adjO(v) { if(selIdx!==-1){ map[selIdx].off+=v; updatePanel(); save(); render(); } }
 function nudge(dx,dy) { if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
-function clearAll() { if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
-async function exportURL() { const exportMap = map.map(d => { const a = assets[d.aIdx]; return { n: a.name || null, x: d.x, y: d.y, s: d.s, off: d.off, ox: d.ox, oy: d.oy, mem: d.mem, src: a.name ? null : a.src }; }); const compressed = LZString.compressToEncodedURIComponent(JSON.stringify({ m: exportMap, l: lines })); const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed; try { const res = await fetch(`https://is.gd/create.php?format=json&url=${encodeURIComponent(fullUrl)}`); const data = await res.json(); navigator.clipboard.writeText(data.shorturl || fullUrl); alert("URLをコピーしました"); } catch (e) { navigator.clipboard.writeText(fullUrl); alert("URLをコピーしました"); } }
+function clearAll() { showConfirm("配置をすべて消去しますか？", () => { map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); }); }
+
+function getShortUrlJsonp(longUrl) {
+    return new Promise((resolve, reject) => {
+        const callbackName = "isgd_cb_" + Math.random().toString(36).substring(2, 10);
+        const script = document.createElement("script");
+        script.src = "https://is.gd/create.php?format=json&url=" + encodeURIComponent(longUrl) + "&callback=" + callbackName;
+        
+        const timeoutId = setTimeout(() => {
+            cleanup();
+            reject(new Error("Timeout"));
+        }, 8000);
+        
+        window[callbackName] = function(data) {
+            cleanup();
+            if (data && data.shorturl) {
+                resolve(data.shorturl);
+            } else if (data && data.errormessage) {
+                reject(new Error(data.errormessage));
+            } else {
+                reject(new Error("Unknown error"));
+            }
+        };
+        
+        function cleanup() {
+            clearTimeout(timeoutId);
+            if (script.parentNode) {
+                script.parentNode.removeChild(script);
+            }
+            delete window[callbackName];
+        }
+        
+        script.onerror = function() {
+            cleanup();
+            reject(new Error("Network error"));
+        };
+        
+        document.body.appendChild(script);
+    });
+}
+
+// CORS-Bypassed Backend Short url router trigger
+async function exportURL() { 
+    const exportMap = map.map(d => { 
+        const a = assets[d.aIdx]; 
+        return { n: a.name || null, x: d.x, y: d.y, s: d.s, off: d.off, ox: d.ox, oy: d.oy, mem: d.mem, src: a.name ? null : a.src }; 
+    }); 
+    const compressed = LZString.compressToEncodedURIComponent(JSON.stringify({ m: exportMap, l: lines })); 
+    const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed; 
+    
+    // 1. Try browser-direct fetch first (utilizing user's residential/mobile IP to avoid cloud IP blocks)
+    try {
+        const isGdUrl = "https://is.gd/create.php?format=json&url=" + encodeURIComponent(fullUrl);
+        const response = await fetch(isGdUrl);
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.shorturl) {
+                navigator.clipboard.writeText(data.shorturl); 
+                alert("URLをコピーしました！\n" + data.shorturl); 
+                return;
+            }
+        }
+        throw new Error("Direct fetch failed");
+    } catch (e) {
+        console.warn("Direct fetch to is.gd failed, trying JSONP...", e);
+    }
+
+    // 2. Try JSONP (absolutely bypasses strict CORS requirements in some browsers)
+    try {
+        const shortUrl = await getShortUrlJsonp(fullUrl);
+        navigator.clipboard.writeText(shortUrl); 
+        alert("URLをコピーしました！\n" + shortUrl); 
+        return;
+    } catch (e) {
+        console.warn("JSONP to is.gd failed, falling back to server...", e);
+    }
+
+    // 3. Fallback to Cloud Run server persistence route if user is offline/blocked from is.gd directly
+    try { 
+        const res = await fetch("/api/shorten", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: fullUrl })
+        }); 
+        const data = await res.json(); 
+        
+        if (data.shorturl) {
+            navigator.clipboard.writeText(data.shorturl); 
+            alert("URLをコピーしました！\n" + data.shorturl); 
+        } else {
+            throw new Error();
+        }
+    } catch (e) { 
+        navigator.clipboard.writeText(fullUrl); 
+        alert("短縮APIエラーのため、通常のフル共有コピーをしました。"); 
+    } 
+}
+
 function applyData(code) { try { const json = LZString.decompressFromEncodedURIComponent(code); const d = JSON.parse(json); lines = d.l || []; map = d.m.map(item => { let aIdx = assets.findIndex(a => a.name === item.n); if(aIdx === -1 && item.src) { const img = new Image(); img.src = item.src; assets.push({ img, src: item.src, name: null, defS: 1, defO: 0, gw: 1, gh: 1, ox: 0, oy: 0 }); addThumb(assets.length - 1); aIdx = assets.length - 1; } return { id: Date.now()+Math.random(), x: item.x, y: item.y, aIdx: aIdx===-1?0:aIdx, s: item.s, off: item.off, ox: item.ox, oy: item.oy, mem: item.mem || "" }; }); save(); render(); } catch(e) {} }
-function crop(img) { const c = document.createElement('canvas'), t = c.getContext('2d'); c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } const w = x2-x1+1, h = y2-y1+1, c2 = document.createElement('canvas'); c2.width = w; c2.height = h; c2.getContext('2d').drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
+function crop(img) { const c = document.createElement('canvas'), t = c.getContext('2d'); if(!t) return img.src; c.width = img.width; c.height = img.height; t.drawImage(img,0,0); const d = t.getImageData(0,0,c.width,c.height).data; let x1=c.width, y1=c.height, x2=0, y2=0; for(let y=0; y<c.height; y++) for(let x=0; x<c.width; x++) if(d[(y*c.width+x)*4+3]>10){ x1=Math.min(x1,x); y1=Math.min(y1,y); x2=Math.max(x2,x); y2=Math.max(y2,y); } if(x2 < x1 || y2 < y1) return img.src; const w = x2-x1+1, h = y2-y1+1, c2 = document.createElement('canvas'); c2.width = w; c2.height = h; const t2 = c2.getContext('2d'); if(!t2) return img.src; t2.drawImage(img,x1,y1,w,h,0,0,w,h); return c2.toDataURL(); }
 init();
 document.getElementById('size-s').addEventListener('input', (e) => { if(selIdx!==-1){ map[selIdx].s = parseFloat(e.target.value); render(); } });
 document.getElementById('off-s').addEventListener('input', (e) => { if(selIdx!==-1){ map[selIdx].off = parseInt(e.target.value); render(); } });
