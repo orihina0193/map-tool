@@ -128,7 +128,6 @@ function handleGuideClick(key, event) {
     return true;
 }
 
-// 【修正2】編集ロック機能
 function toggleEditLock() {
     isEditLocked = !isEditLocked;
     const btn = document.getElementById('lock-toggle');
@@ -242,7 +241,6 @@ function adjO(v) { if(isEditLocked) return; if(selIdx!==-1){ map[selIdx].off+=v;
 function nudge(dx,dy) { if(isEditLocked) return; if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(isEditLocked) return; if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
 
-// 【修正3】TinyURL系をis.gdに変更し、ロック状態を保持
 async function exportURL() {
     const exportMap = map.map(d => {
         const a = assets[d.aIdx];
@@ -256,15 +254,17 @@ async function exportURL() {
     }));
     
     const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed;
+    
     try {
-        const res = await fetch(`https://is.gd/create.php?format=json&url=${encodeURIComponent(fullUrl)}`);
-        const data = await res.json();
-        const finalUrl = data.shorturl || fullUrl;
-        navigator.clipboard.writeText(finalUrl);
-        alert(isEditLocked ? "閲覧専用URLをコピーしました" : "編集可能URLをコピーしました");
+        // 【修正】TinyURL API仕様に基づき、res.text() を使用
+        const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(fullUrl)}`);
+        const shortUrl = await res.text();
+        
+        navigator.clipboard.writeText(shortUrl);
+        alert(isEditLocked ? "閲覧専用の短縮URLをコピーしました" : "編集可能の短縮URLをコピーしました");
     } catch (e) {
         navigator.clipboard.writeText(fullUrl);
-        alert(isEditLocked ? "閲覧専用URLをコピーしました" : "編集可能URLをコピーしました");
+        alert("短縮に失敗したため、フルURLをコピーしました。");
     }
 }
 
