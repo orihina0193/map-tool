@@ -130,11 +130,9 @@ function handleGuideClick(key, event) {
 
 function toggleEditLock() {
     const params = new URLSearchParams(window.location.search);
-    if (isEditLocked && params.get('d')) {
-        alert("このマップは閲覧専用です。編集はできません。");
-        return; 
+    if (params.get('d') && isEditLocked) {
+        if (!confirm("閲覧専用モードを解除して編集しますか？")) return;
     }
-
     isEditLocked = !isEditLocked;
     const btn = document.getElementById('lock-toggle');
     if (isEditLocked) {
@@ -189,11 +187,7 @@ function exportImage() { deselect(); render(); const tempCvs = document.createEl
 function handleStart(x, y) {
     if (guideMode) return;
     const rawG = toG(x, y), gx_o = Math.floor(rawG.x), gy_o = Math.floor(rawG.y), gx_p = Math.round(rawG.x), gy_p = Math.round(rawG.y);
-    if (isEditLocked) {
-        selIdx = -1; lockedId = null; drag = true; updateCurBox(); render();
-        return;
-    }
-
+    if (isEditLocked) { selIdx = -1; lockedId = null; drag = true; updateCurBox(); render(); return; }
     if(mode === 'pen') { penStart = {x:gx_p, y:gy_p}; penCurrent = {x:gx_p, y:gy_p}; render(); return; }
     if(mode === 'p-erase') { const distToSeg = (p, v, w) => { const l2 = Math.pow(v.x-w.x,2) + Math.pow(v.y-w.y,2); if(l2 === 0) return Math.hypot(p.x-v.x, p.y-v.y); let t = Math.max(0, Math.min(1, ((p.x-v.x)*(w.x-v.x) + (p.y-v.y)*(w.y-v.y)) / l2)); return Math.hypot(p.x-(v.x+t*(w.x-v.x)), p.y-(v.y+t*(w.y-v.y))); }; lines = lines.filter(l => distToSeg(rawG, {x:l.x1, y:l.y1}, {x:l.x2, y:l.y2}) > 0.5); save(); render(); return; }
     let hitIdx = map.findLastIndex(d => { const a = assets[d.aIdx]; return rawG.x >= d.x && rawG.x < d.x + a.gw && rawG.y >= d.y && rawG.y < d.y + a.gh; });
@@ -253,7 +247,6 @@ async function exportURL() {
         return { n: a.name || null, x: d.x, y: d.y, s: d.s, off: d.off, ox: d.ox, oy: d.oy, mem: d.mem, src: a.name ? null : a.src };
     });
     
-    // 現在のロック状態をフラグとして保存
     const compressed = LZString.compressToEncodedURIComponent(JSON.stringify({ 
         m: exportMap, 
         l: lines,
@@ -262,14 +255,13 @@ async function exportURL() {
     
     const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed;
     try {
-        const res = await fetch(`https://is.gd/create.php?format=json&url=${encodeURIComponent(fullUrl)}`);
-        const data = await res.json();
-        const finalUrl = data.shorturl || fullUrl;
-        navigator.clipboard.writeText(finalUrl);
-        alert(isEditLocked ? "閲覧専用URLをコピーしました" : "編集可能URLをコピーしました");
+        const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(fullUrl)}`);
+        const shortUrl = await res.text();
+        navigator.clipboard.writeText(shortUrl);
+        alert(isEditLocked ? "閲覧専用URL(TinyURL)をコピーしました" : "編集可能URL(TinyURL)をコピーしました");
     } catch (e) {
         navigator.clipboard.writeText(fullUrl);
-        alert(isEditLocked ? "閲覧専用URLをコピーしました" : "編集可能URLをコピーしました");
+        alert("短縮に失敗したため、元のURLをコピーしました");
     }
 }
 
@@ -292,9 +284,8 @@ function applyData(code) {
         save();
         render();
 
-        if (d.locked) {
-            // 強制的にロック状態へ移行（すでにisEditLockedがtrueなら何もしない）
-            if(!isEditLocked) toggleEditLock();
+        if (d.locked && !isEditLocked) {
+            toggleEditLock();
         }
     } catch(e) {}
 }
