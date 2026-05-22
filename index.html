@@ -35,7 +35,6 @@
         .mode-row button { flex: 1; height: 30px; font-size: 9px; font-weight: bold; border-radius: 5px; border: 1px solid #ccc; background: #fff; }
         .mode-row button.active { background: #007aff; color: #fff; }
         
-        /* 編集ロックボタンの専用スタイル */
         .lock-btn { width: 40px; height: 30px; font-size: 14px; border-radius: 5px; border: 1px solid #ff9500; background: #fff; color: #ff9500; font-weight: bold; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
         .lock-btn.locked { background: #ff9500; color: #fff; }
 
@@ -95,7 +94,6 @@
 
 <script>
 let guideMode = false;
-// 編集ロックの状態管理フラグ (false: 通常 / true: ロック中)
 let isEditLocked = false;
 
 const GUIDE_TEXT = {
@@ -120,7 +118,7 @@ function toggleGuideMode() {
     btn.classList.toggle('active'); btn.innerText = guideMode ? '×' : '?';
     msg.style.display = guideMode ? 'block' : 'none';
     msg.innerText = 'ガイドモード：ボタンをタップして説明を表示';
-    if (!guideMode) deselect(); // ガイド終了時に選択状態をクリア（事故防止）
+    if (!guideMode) deselect();
 }
 
 function handleGuideClick(key, event) {
@@ -130,9 +128,7 @@ function handleGuideClick(key, event) {
     return true;
 }
 
-// 編集ロック切り替え関数
 function toggleEditLock() {
-    // URLパラメータ「?d=」が存在している閲覧専用モードのときは、ボタンを押してもロック解除させない
     const params = new URLSearchParams(window.location.search);
     if (isEditLocked && params.get('d')) {
         alert("このマップは閲覧専用です。編集はできません。");
@@ -144,7 +140,7 @@ function toggleEditLock() {
     if (isEditLocked) {
         btn.classList.add('locked');
         btn.innerText = '🔒';
-        deselect(); // ロックをかけた瞬間に選択中の建物を解除して安全にする
+        deselect();
     } else {
         btn.classList.remove('locked');
         btn.innerText = '🔓';
@@ -193,9 +189,6 @@ function exportImage() { deselect(); render(); const tempCvs = document.createEl
 function handleStart(x, y) {
     if (guideMode) return;
     const rawG = toG(x, y), gx_o = Math.floor(rawG.x), gy_o = Math.floor(rawG.y), gx_p = Math.round(rawG.x), gy_p = Math.round(rawG.y);
-    
-    // 【編集ロック中の挙動制御】
-    // ロック時は配置・消去・ペンを一切無視し、純粋な画面スクロール（ドラッグ移動）のみを受け付ける
     if (isEditLocked) {
         selIdx = -1; lockedId = null; drag = true; updateCurBox(); render();
         return;
@@ -208,24 +201,14 @@ function handleStart(x, y) {
     if(mode === 'move') {
         if(hitIdx !== -1) { if(activeAsset !== -1) tempAssetStore = activeAsset; activeAsset = -1; selIdx = hitIdx; lockedId = map[selIdx].id; updateCurBox(); updatePanel(); render(); return; }
         if(activeAsset === -1 && tempAssetStore !== -1) { activeAsset = tempAssetStore; }
-       if(activeAsset !== -1) { 
-    const a = assets[activeAsset], nx = gx_o - (a.gw-1), ny = gy_o - (a.gh-1); 
-    if(!isBlocked(nx, ny, a.gw, a.gh)) { 
-        const prev = [...map].reverse().find(d => d.aIdx === activeAsset);
-        const n = {
-            id: Date.now() + Math.random(), 
-            x: nx, y: ny, aIdx: activeAsset, 
-            s: prev ? prev.s : a.defS,     
-            off: prev ? prev.off : a.defO, 
-            ox: prev ? prev.ox : a.ox,     
-            oy: prev ? prev.oy : a.oy,     
-            mem: ""
-        }; 
-        map.push(n); 
-        selIdx = map.length - 1; lockedId = n.id; 
-        updateCurBox(); updatePanel(); save(); render(); return; 
-    } 
-}
+        if(activeAsset !== -1) { 
+            const a = assets[activeAsset], nx = gx_o - (a.gw-1), ny = gy_o - (a.gh-1); 
+            if(!isBlocked(nx, ny, a.gw, a.gh)) { 
+                const prev = [...map].reverse().find(d => d.aIdx === activeAsset);
+                const n = { id: Date.now() + Math.random(), x: nx, y: ny, aIdx: activeAsset, s: prev ? prev.s : a.defS, off: prev ? prev.off : a.defO, ox: prev ? prev.ox : a.ox, oy: prev ? prev.oy : a.oy, mem: "" }; 
+                map.push(n); selIdx = map.length - 1; lockedId = n.id; updateCurBox(); updatePanel(); save(); render(); return; 
+            } 
+        }
         selIdx = -1; lockedId = null; drag = true; updateCurBox(); render();
     }
 }
@@ -244,11 +227,7 @@ function setupEvents() {
 
 function updateCurBox() { const box = document.getElementById('cur-box'); const nameIn = document.getElementById('member-name-in'); if(selIdx !== -1) { box.style.backgroundImage = `url(${assets[map[selIdx].aIdx].src})`; box.classList.add('has-item'); nameIn.value = map[selIdx].mem || ""; } else if(activeAsset !== -1) { box.style.backgroundImage = `url(${assets[activeAsset].src})`; box.classList.add('has-item'); nameIn.value = ""; } else { box.style.backgroundImage = 'none'; box.classList.remove('has-item'); nameIn.value = ""; } }
 function openMemberList() { const listCont = document.getElementById('mem-list'); listCont.innerHTML = ""; const members = map.filter(d => d.mem && d.mem.trim() !== ""); if(members.length === 0) { listCont.innerHTML = "<div style='text-align:center; padding:20px; color:#999;'>まだメンバーが配置されていません</div>"; } else { members.sort((a,b) => a.mem.localeCompare(b.mem)).forEach(m => { const div = document.createElement('div'); div.className = 'mem-item'; div.innerHTML = `<span>${m.mem}</span><span style="color:#007aff; font-weight:bold; font-size:12px; cursor:pointer;">表示 ▶</span>`; div.onclick = () => { jumpToMember(m.id); document.getElementById('mem-overlay').style.display='none'; }; listCont.appendChild(div); }); } document.getElementById('mem-overlay').style.display = 'flex'; }
-
-// 【名簿からの特定ジャンプ】
-// 編集ロック状態の有無に関わらず、カメラ座標の計算および移動はそのまま稼働します
 function jumpToMember(id) { const d = map.find(item => item.id === id); if(!d) return; const pos = toS(d.x + 1, d.y + 1); cam.x = cvs.width/2 - pos.x * cam.z; cam.y = cvs.height/2 - pos.y * cam.z; selIdx = map.findIndex(item => item.id === id); updateCurBox(); render(); }
-
 function deselect() { activeAsset = -1; tempAssetStore = -1; selIdx = -1; lockedId = null; updateCurBox(); render(); }
 function updateMemberName(val) { if(isEditLocked) return; if(selIdx !== -1) { map[selIdx].mem = val; save(); render(); } }
 function toggleAssetModal(show) { if(isEditLocked && show) return; document.getElementById('asset-overlay').style.display = show ? 'flex' : 'none'; }
@@ -268,33 +247,32 @@ function adjO(v) { if(isEditLocked) return; if(selIdx!==-1){ map[selIdx].off+=v;
 function nudge(dx,dy) { if(isEditLocked) return; if(selIdx!==-1){ map[selIdx].ox=parseFloat((map[selIdx].ox+dx).toFixed(2)); map[selIdx].oy=parseFloat((map[selIdx].oy+dy).toFixed(2)); save(); render(); } }
 function clearAll() { if(isEditLocked) return; if(confirm("配置をすべて消去しますか？")){ map=[]; lines=[]; selIdx=-1; lockedId=null; save(); updateCurBox(); render(); } }
 
-// 【共有URL発行処理の拡張】
 async function exportURL() {
     const exportMap = map.map(d => {
         const a = assets[d.aIdx];
         return { n: a.name || null, x: d.x, y: d.y, s: d.s, off: d.off, ox: d.ox, oy: d.oy, mem: d.mem, src: a.name ? null : a.src };
     });
     
-    // データオブジェクト内に「閲覧専用の強制ロックフラグ」を埋め込む
+    // 現在のロック状態をフラグとして保存
     const compressed = LZString.compressToEncodedURIComponent(JSON.stringify({ 
         m: exportMap, 
         l: lines,
-        locked: true 
+        locked: isEditLocked
     }));
     
     const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed;
     try {
         const res = await fetch(`https://is.gd/create.php?format=json&url=${encodeURIComponent(fullUrl)}`);
         const data = await res.json();
-        navigator.clipboard.writeText(data.shorturl || fullUrl);
-        alert("閲覧専用のURLをコピーしました");
+        const finalUrl = data.shorturl || fullUrl;
+        navigator.clipboard.writeText(finalUrl);
+        alert(isEditLocked ? "閲覧専用URLをコピーしました" : "編集可能URLをコピーしました");
     } catch (e) {
         navigator.clipboard.writeText(fullUrl);
-        alert("閲覧専用のURLをコピーしました");
+        alert(isEditLocked ? "閲覧専用URLをコピーしました" : "編集可能URLをコピーしました");
     }
 }
 
-// 【共有データ展開処理の拡張】
 function applyData(code) {
     try {
         const json = LZString.decompressFromEncodedURIComponent(code);
@@ -314,9 +292,9 @@ function applyData(code) {
         save();
         render();
 
-        // 展開したデータ内に locked: true が含まれていた場合、ページ読み込み完了時に強制ロックをかける
         if (d.locked) {
-            toggleEditLock();
+            // 強制的にロック状態へ移行（すでにisEditLockedがtrueなら何もしない）
+            if(!isEditLocked) toggleEditLock();
         }
     } catch(e) {}
 }
