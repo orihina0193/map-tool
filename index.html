@@ -128,7 +128,14 @@ function handleGuideClick(key, event) {
     return true;
 }
 
+// 修正箇所：ロック解除時に確認ポップアップを表示
 function toggleEditLock() {
+    if (isEditLocked) {
+        if (!confirm("閲覧モードを解除しますか？")) {
+            return;
+        }
+    }
+
     isEditLocked = !isEditLocked;
     const btn = document.getElementById('lock-toggle');
     if (isEditLocked) {
@@ -256,7 +263,6 @@ async function exportURL() {
     const fullUrl = window.location.href.split('?')[0] + "?d=" + compressed;
     
     try {
-        // 【修正】TinyURL API仕様に基づき、res.text() を使用
         const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(fullUrl)}`);
         const shortUrl = await res.text();
         
