@@ -164,10 +164,26 @@ function handleStart(x, y) {
     if(mode === 'move') {
         if(hitIdx !== -1) { if(activeAsset !== -1) tempAssetStore = activeAsset; activeAsset = -1; selIdx = hitIdx; lockedId = map[selIdx].id; updateCurBox(); updatePanel(); render(); return; }
         if(activeAsset === -1 && tempAssetStore !== -1) { activeAsset = tempAssetStore; }
-        if(activeAsset !== -1) { 
-            const a = assets[activeAsset], nx = gx_o - (a.gw-1), ny = gy_o - (a.gh-1); 
-            if(!isBlocked(nx, ny, a.gw, a.gh)) { const n = {id: Date.now()+Math.random(), x: nx, y: ny, aIdx: activeAsset, s: a.defS, off: a.defO, ox: a.ox, oy: a.oy, mem: ""}; map.push(n); selIdx = map.length - 1; lockedId = n.id; updateCurBox(); updatePanel(); save(); render(); return; } 
-        }
+       if(activeAsset !== -1) { 
+    const a = assets[activeAsset], nx = gx_o - (a.gw-1), ny = gy_o - (a.gh-1); 
+    if(!isBlocked(nx, ny, a.gw, a.gh)) { 
+        // 直前に置いた同じ建物の設定を検索
+        const prev = [...map].reverse().find(d => d.aIdx === activeAsset);
+        
+        const n = {
+            id: Date.now() + Math.random(), 
+            x: nx, y: ny, aIdx: activeAsset, 
+            s: prev ? prev.s : a.defS,     // サイズを固定
+            off: prev ? prev.off : a.defO, // 接地を固定
+            ox: prev ? prev.ox : a.ox,     // 微調整Xを固定
+            oy: prev ? prev.oy : a.oy,     // 微調整Yを固定
+            mem: ""
+        }; 
+        map.push(n); 
+        selIdx = map.length - 1; lockedId = n.id; 
+        updateCurBox(); updatePanel(); save(); render(); return; 
+    } 
+}
         selIdx = -1; lockedId = null; drag = true; updateCurBox(); render();
     }
 }
