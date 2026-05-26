@@ -1,0 +1,2072 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Map Tool</title>
+  
+  <!-- CSS Reset & Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS Play CDN (perfectly compiles all styling classes) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18 CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel compiler CDN (runs in browser) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- LZ-String compression CDN (decompress shared cloud strings) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* Custom CSS animations matching Motion */
+    @keyframes slideDownIn {
+      0% { opacity: 0; transform: translate(-50%, -20px); }
+      100% { opacity: 1; transform: translate(-50%, 0); }
+    }
+    @keyframes slideUpIn {
+      0% { opacity: 0; transform: translate(-50%, 10px); }
+      100% { opacity: 1; transform: translate(-50%, 0); }
+    }
+    .animate-toast {
+      animation: slideDownIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .animate-guide {
+      animation: slideUpIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    body {
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React App using Babel JSX compilation -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+    
+    // Custom wrapper for Lucide Icons in standalone browser HTML environment
+    const Icon = ({ name, size = 18, className = "", ...props }) => {
+      const [svgContent, setSvgContent] = useState("");
+      
+      useEffect(() => {
+        if (window.lucide && window.lucide.icons) {
+          const camelName = name.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+          const icon = window.lucide.icons[name] || window.lucide.icons[camelName];
+          if (icon) {
+            // Reconstruct the inner HTML of the SVG
+            const inner = icon[2].map(([tag, attrs]) => {
+              const attrStr = Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(" ");
+              return `<${tag} ${attrStr} />`;
+            }).join("");
+            setSvgContent(inner);
+          }
+        }
+      }, [name]);
+
+      const camelName = name.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+      const icon = window.lucide && window.lucide.icons ? (window.lucide.icons[name] || window.lucide.icons[camelName]) : null;
+      const defaultAttrs = icon ? icon[1] : {
+        xmlns: "http://www.w3.org/2000/svg",
+        width: "24",
+        height: "24",
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: "2",
+        strokeLinecap: "round",
+        strokeLinejoin: "round"
+      };
+
+      return (
+        <svg
+          {...defaultAttrs}
+          width={size}
+          height={size}
+          className={`lucide lucide-${name} ${className}`}
+          {...props}
+          dangerouslySetInnerHTML={{ __html: svgContent }}
+        />
+      );
+    };
+
+    // Custom individual icon components
+    const Camera = (props) => <Icon name="camera" {...props} />;
+    const MapPin = (props) => <Icon name="map-pin" {...props} />;
+    const Plus = (props) => <Icon name="plus" {...props} />;
+    const Trash2 = (props) => <Icon name="trash-2" {...props} />;
+    const RotateCcw = (props) => <Icon name="rotate-ccw" {...props} />;
+    const Maximize2 = (props) => <Icon name="maximize-2" {...props} />;
+    const SlidersHorizontal = (props) => <Icon name="sliders" {...props} />;
+    const Lock = (props) => <Icon name="lock" {...props} />;
+    const Unlock = (props) => <Icon name="unlock" {...props} />;
+    const Users = (props) => <Icon name="users" {...props} />;
+    const Save = (props) => <Icon name="save" {...props} />;
+    const HelpCircle = (props) => <Icon name="help-circle" {...props} />;
+    const Copy = (props) => <Icon name="copy" {...props} />;
+    const Check = (props) => <Icon name="check" {...props} />;
+    const Eye = (props) => <Icon name="eye" {...props} />;
+    const Grid = (props) => <Icon name="grid" {...props} />;
+    const ChevronUp = (props) => <Icon name="chevron-up" {...props} />;
+    const ChevronDown = (props) => <Icon name="chevron-down" {...props} />;
+    const ChevronLeft = (props) => <Icon name="chevron-left" {...props} />;
+    const ChevronRight = (props) => <Icon name="chevron-right" {...props} />;
+    const Move = (props) => <Icon name="move" {...props} />;
+    const PenTool = (props) => <Icon name="pen-tool" {...props} />;
+    const Eraser = (props) => <Icon name="eraser" {...props} />;
+    const FileImage = (props) => <Icon name="file-image" {...props} />;
+    const Upload = (props) => <Icon name="upload" {...props} />;
+    const X = (props) => <Icon name="x" {...props} />;
+
+    // API GAS Endpoint configuration
+    const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbzQOcpj6K247JSfRYxy40hHzCiTPt5MYEbvNKT6S33KZ3Ncp1XzzOXkePn4rAMuki0Y/exec";
+
+    const T_W = 64;
+    const T_H = 32;
+
+    const PRESETS = [
+      { name: "HQ", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/HQ.png", s: 1.6, o: 1, gw: 2, gh: 2, ox: -0.1, oy: -0.2 },
+      { name: "DOOM", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/DOOM.png", s: 1.6, o: -3, gw: 2, gh: 2, ox: -0.2, oy: 0 },
+      { name: "MED", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/MED.png", s: 1.6, o: -1, gw: 2, gh: 2, ox: -0.1, oy: -0.1 },
+      { name: "SRG", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/SRG.png", s: 1.7, o: -3, gw: 2, gh: 2, ox: -0.1, oy: -0.1 },
+      { name: "RSS", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/RSS.png", s: 1.6, o: -4, gw: 2, gh: 2, ox: -0.2, oy: -0.3 },
+      { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 1.6, o: 0, gw: 2, gh: 2, ox: -0.2, oy: -0.2 },
+      { name: "OP", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/OP.png", s: 0.8, o: 0, gw: 1, gh: 1, ox: -0.1, oy: -0.1 },
+      { name: "tile", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile.png", s: 1.6, o: 1, gw: 2, gh: 2, ox: -0.1, oy: -0.2 },
+      { name: "ROCK2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 0.75, o: -5, gw: 1, gh: 1, ox: 0, oy: 0 }
+    ];
+
+    function App() {
+      const [currentRoomName, setCurrentRoomName] = useState(null);
+      const [guideMode, setGuideMode] = useState(false);
+      const [guideText, setGuideText] = useState("ガイドモード：ボタンをタップして説明を表示");
+      const [isEditLocked, setIsEditLocked] = useState(false);
+      const [mode, setMode] = useState("move");
+      
+      // 新しい「座標登録モード」
+      const [isCoordSettingMode, setIsCoordSettingMode] = useState(false);
+      const [coordMapping, setCoordMapping] = useState({
+        refGx: 0,
+        refGy: 0,
+        x0: 100,
+        y0: 100,
+        x1: 101,
+        y1: 100,
+        x2: 100,
+        y2: 101,
+        isValid: false
+      });
+      
+      // 座標基準点入力用のstate
+      const [coordInput, setCoordInput] = useState({
+        aX: "100", aY: "100",
+        bX: "101", bY: "100",
+        cX: "100", cY: "101"
+      });
+
+      // タップ/クリックされた現在のマス座標（X:Y コピー用等）
+      const [selectedGrid, setSelectedGrid] = useState(null);
+      const [copiedNotification, setCopiedNotification] = useState(null);
+
+      // ステート群
+      const [assets, setAssets] = useState([]);
+      const [map, setMap] = useState([]);
+      const [lines, setLines] = useState([]);
+      const [selIdx, setSelIdx] = useState(-1);
+      const [activeAsset, setActiveAsset] = useState(-1);
+      const [tempAssetStore, setTempAssetStore] = useState(-1);
+      const [syncStatus, setSyncStatus] = useState(null);
+      const [clearClickCount, setClearClickCount] = useState(0);
+      const [isBotPanelCollapsed, setIsBotPanelCollapsed] = useState(false);
+
+      // オーバーレイ / モーダル
+      const [showMemOverlay, setShowMemOverlay] = useState(false);
+      const [showAssetOverlay, setShowAssetOverlay] = useState(false);
+      const [exportImageUrl, setExportImageUrl] = useState(null);
+
+      // キャンバス / カメラ Ref
+      const canvasRef = useRef(null);
+      const camRef = useRef({ x: 0, y: 0, z: 1 });
+      const drawMapRef = useRef(() => {});
+      const dragRef = useRef(false);
+      const pinchRef = useRef(false);
+      const lockedIdRef = useRef(null);
+      const penStartRef = useRef(null);
+      const penCurrentRef = useRef(null);
+      const lastTRef = useRef({ x: 0, y: 0 });
+      const lastDistRef = useRef(0);
+
+      // 座標登録モードでのL字ドラッグ用
+      const isDraggingCoordRef = useRef(false);
+
+      // コピー文字列
+      const showToast = (msg) => {
+        setCopiedNotification(msg);
+        setTimeout(() => setCopiedNotification(null), 2500);
+      };
+
+      // 画像のクロップ処理
+      const cropImage = (img) => {
+        const c = document.createElement("canvas");
+        const t = c.getContext("2d");
+        if (!t) return img.src;
+        c.width = img.width;
+        c.height = img.height;
+        t.drawImage(img, 0, 0);
+        const d = t.getImageData(0, 0, c.width, c.height).data;
+        let x1 = c.width, y1 = c.height, x2 = 0, y2 = 0;
+        for (let y = 0; y < c.height; y++) {
+          for (let x = 0; x < c.width; x++) {
+            if (d[(y * c.width + x) * 4 + 3] > 10) {
+              x1 = Math.min(x1, x);
+              y1 = Math.min(y1, y);
+              x2 = Math.max(x2, x);
+              y2 = Math.max(y2, y);
+            }
+          }
+        }
+        const w = x2 - x1 + 1;
+        const h = y2 - y1 + 1;
+        if (w <= 0 || h <= 0) return img.src;
+
+        const c2 = document.createElement("canvas");
+        c2.width = w;
+        c2.height = h;
+        const t2 = c2.getContext("2d");
+        if (!t2) return img.src;
+        t2.drawImage(img, x1, y1, w, h, 0, 0, w, h);
+        return c2.toDataURL();
+      };
+
+      // 座標変換用の計算機 (等角グリッド gx, gy からゲーム内 X, Y を算出)
+      const getGameCoords = (gx, gy) => {
+        if (!coordMapping.isValid) return null;
+        const gX = Math.round(gx);
+        const gY = Math.round(gy);
+        
+        // Aからの相対的な位置
+        const dx = gX - coordMapping.refGx;
+        const dy = gY - coordMapping.refGy;
+
+        // 定義された3点から線形補間 (アフィンマッパー)
+        const X = coordMapping.x0 + dx * (coordMapping.x1 - coordMapping.x0) + dy * (coordMapping.x2 - coordMapping.x0);
+        const Y = coordMapping.y0 + dx * (coordMapping.y1 - coordMapping.y0) + dy * (coordMapping.y2 - coordMapping.y0);
+
+        return { x: Math.round(X), y: Math.round(Y) };
+      };
+
+      // ガイド表示切り替え
+      const toggleGuideMode = () => {
+        setGuideMode(!guideMode);
+        if (!guideMode) {
+          setGuideText("ガイドモード：ボタンをタップして説明を表示");
+        } else {
+          setSelectedGrid(null);
+        }
+      };
+
+      const handleGuideClick = (key, e) => {
+        if (!guideMode) return false;
+        e.stopPropagation();
+        e.preventDefault();
+        const GUIDE_TEXT_MAP = {
+          '選択解除': '選択中の建物を解除します。',
+          'ギルメン名': '配置した建物に名前を付けます。',
+          '名簿': '配置済みのメンバーを一覧表示し、タップするとその位置へジャンプします。',
+          '素材追加': 'タップすると、新しい建物アセットを選択または独自の画像を登録できます。',
+          'リセット': '全体をクリーンにリセットします。',
+          'サイズ調整': 'スライダーで選択中の建物のサイズを変更します。',
+          '接地調整': '前後関係や等角投影グリッドとの重なり順を調整します。',
+          '微調整': '配置された建物のアンカー位置を十字ボタンで細かく調整します。',
+          '画像保存': '現在の配置図を白背景の1枚の画像として生成・ダウンロード保存します。',
+          '全消去': '配置したすべてのオブジェクト・赤線を消去します。',
+          'モード切替': '移動、ペンでのルート描画、赤線消去、建物消去を選択します。',
+          '座標登録': '座標登録モードに入ります。作業エリアが暗くなり、赤く並んだ3マスの基準点(L字)が現れます。このL字基準点をドラッグして好きな場所に配置し、それぞれの箇所のゲーム内座標(X:Y)を入力して登録します。'
+        };
+        setGuideText(GUIDE_TEXT_MAP[key] || "ガイド説明があります。");
+        return true;
+      };
+
+      // 編集ロック
+      const toggleEditLock = () => {
+        setIsEditLocked(!isEditLocked);
+        if (!isEditLocked) {
+          setSelIdx(-1);
+          lockedIdRef.current = null;
+          setActiveAsset(-1);
+        }
+      };
+
+      // URLパラメータとデータの初回ロード
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const room = params.get("room");
+        if (room) {
+          setCurrentRoomName(room);
+        }
+
+        // 座標マッピングデータの初期化ロード
+        const savedMapping = localStorage.getItem("coord_mapping_v1");
+        if (savedMapping) {
+          try {
+            const parsed = JSON.parse(savedMapping);
+            setCoordMapping(parsed);
+            setCoordInput({
+              aX: parsed.x0.toString(), aY: parsed.y0.toString(),
+              bX: parsed.x1.toString(), bY: parsed.y1.toString(),
+              cX: parsed.x2.toString(), cY: parsed.y2.toString()
+            });
+          } catch (e) {
+            console.error("Failed to load layout map coordinates:", e);
+          }
+        }
+
+        // プリセットアセットのロード＆クロップ
+        loadPresetsAssets();
+      }, []);
+
+      // クラウドまたはローカルからの読込
+      useEffect(() => {
+        if (currentRoomName) {
+          loadFromCloud(currentRoomName);
+        } else {
+          loadLocalData();
+        }
+      }, [currentRoomName]);
+
+      const showStatus = (text, color, autoHideDelay = 3000) => {
+        setSyncStatus({ text, color });
+        if (autoHideDelay > 0) {
+          setTimeout(() => {
+            setSyncStatus(null);
+          }, autoHideDelay);
+        }
+      };
+
+      // プリセットロード
+      const loadPresetsAssets = async () => {
+        const loadedAssets = [];
+        const hasBackend = window.location.hostname.endsWith("run.app") || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
+        for (const p of PRESETS) {
+          await new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+              const src = cropImage(img);
+              const i2 = new Image();
+              i2.onload = () => {
+                loadedAssets.push({
+                  img: i2,
+                  src,
+                  name: p.name,
+                  defS: p.s,
+                  defO: p.o,
+                  gw: p.gw,
+                  gh: p.gh,
+                  ox: p.ox,
+                  oy: p.oy
+                });
+                resolve();
+              };
+              i2.src = src;
+            };
+
+            img.onerror = () => {
+              // Direct github fallback
+              const directImg = new Image();
+              directImg.crossOrigin = "anonymous";
+              directImg.onload = () => {
+                const src = cropImage(directImg);
+                const i2 = new Image();
+                i2.onload = () => {
+                  loadedAssets.push({
+                    img: i2,
+                    src,
+                    name: p.name,
+                    defS: p.s,
+                    defO: p.o,
+                    gw: p.gw,
+                    gh: p.gh,
+                    ox: p.ox,
+                    oy: p.oy
+                  });
+                  resolve();
+                };
+                i2.src = src;
+              };
+
+              directImg.onerror = () => {
+                // Local fallback (in same directory)
+                const localImg = new Image();
+                localImg.onload = () => {
+                  const src = cropImage(localImg);
+                  const i2 = new Image();
+                  i2.onload = () => {
+                    loadedAssets.push({
+                      img: i2,
+                      src,
+                      name: p.name,
+                      defS: p.s,
+                      defO: p.o,
+                      gw: p.gw,
+                      gh: p.gh,
+                      ox: p.ox,
+                      oy: p.oy
+                    });
+                    resolve();
+                  };
+                  i2.src = src;
+                };
+                localImg.onerror = () => resolve();
+                const relativePath = p.url.includes("img/") ? p.url.slice(p.url.indexOf("img/")) : p.url;
+                localImg.src = relativePath;
+              };
+              directImg.src = p.url;
+            };
+
+            if (hasBackend) {
+              img.src = '/api/proxy-image?url=' + encodeURIComponent(p.url);
+            } else {
+              const relativePath = p.url.includes("img/") ? p.url.slice(p.url.indexOf("img/")) : null;
+              img.src = relativePath || p.url;
+            }
+          });
+        }
+
+        setAssets(loadedAssets);
+      };
+
+      // クラウド読込
+      const loadFromCloud = (roomName) => {
+        showStatus("サーバーから読込中...", "#ff9500", 0);
+        fetch(`${API_ENDPOINT}?room=${encodeURIComponent(roomName)}`)
+          .then((res) => res.text())
+          .then((text) => {
+            if (text && text.trim() !== "") {
+              const d = JSON.parse(LZString.decompressFromEncodedURIComponent(text));
+              setMap(d.m || []);
+              setLines(d.l || []);
+              if (d.c) {
+                setCoordMapping(d.c);
+                setCoordInput({
+                  aX: d.c.x0.toString(),
+                  aY: d.c.y0.toString(),
+                  bX: d.c.x1.toString(),
+                  bY: d.c.y1.toString(),
+                  cX: d.c.x2.toString(),
+                  cY: d.c.y2.toString()
+                });
+                localStorage.setItem("coord_mapping_v1", JSON.stringify(d.c));
+              }
+              showStatus("同期完了", "#34c759");
+            } else {
+              showStatus("新規データです", "#007aff");
+              loadLocalData();
+            }
+          })
+          .catch((err) => {
+            console.error("Load cloud error:", err);
+            showStatus("読込失敗しました", "#ff3b30");
+            loadLocalData();
+          });
+      };
+
+      // クラウド保存
+      const saveToCloud = () => {
+        let room = currentRoomName;
+        if (!room) {
+          const inputName = prompt("部屋名を入力してください（例: orange）");
+          if (!inputName || inputName.trim() === "") return;
+          room = inputName.trim();
+          setCurrentRoomName(room);
+          const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + "?room=" + room;
+          window.history.replaceState({ path: newUrl }, "", newUrl);
+        }
+
+        setSelIdx(-1);
+        lockedIdRef.current = null;
+        showStatus("保存中...", "#ff9500", 0);
+
+        const rawStr = JSON.stringify({ m: map, l: lines, c: coordMapping });
+        const compressedStr = LZString.compressToEncodedURIComponent(rawStr);
+
+        fetch(API_ENDPOINT, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ room, str: compressedStr })
+        })
+          .then(() => {
+            showStatus("保存完了しました！", "#34c759");
+            saveLocalData(room);
+          })
+          .catch((err) => {
+            console.error("Save cloud error:", err);
+            showStatus("保存エラー", "#ff3b30");
+            alert("サーバー保存に失敗しました。ローカルに保存します。");
+            saveLocalData(room);
+          });
+      };
+
+      // ローカル保存
+      const saveLocalData = (roomName) => {
+        const key = roomName ? `map_${roomName}` : "map_v293";
+        localStorage.setItem(key, JSON.stringify({ m: map, l: lines, c: coordMapping }));
+      };
+
+      // ローカル読込
+      const loadLocalData = () => {
+        const key = currentRoomName ? `map_${currentRoomName}` : "map_v293";
+        const s = localStorage.getItem(key);
+        if (s) {
+          try {
+            const d = JSON.parse(s);
+            setMap(d.m || []);
+            setLines(d.l || []);
+            if (d.c) {
+              setCoordMapping(d.c);
+              setCoordInput({
+                aX: d.c.x0.toString(),
+                aY: d.c.y0.toString(),
+                bX: d.c.x1.toString(),
+                bY: d.c.y1.toString(),
+                cX: d.c.x2.toString(),
+                cY: d.c.y2.toString()
+              });
+              localStorage.setItem("coord_mapping_v1", JSON.stringify(d.c));
+            }
+          } catch (e) {
+            console.error("Local load error:", e);
+          }
+        }
+      };
+
+      // 新オリジナル画像追加
+      const handleFiles = (files) => {
+        if (isEditLocked || !files) return;
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            if (!e.target?.result) return;
+            const img = new Image();
+            img.onload = () => {
+              const src = cropImage(img);
+              const i2 = new Image();
+              i2.onload = () => {
+                setAssets(prev => {
+                  const next = [
+                    ...prev,
+                    {
+                      img: i2,
+                      src,
+                      name: null,
+                      defS: 1,
+                      defO: 0,
+                      gw: 1,
+                      gh: 1,
+                      ox: 0,
+                      oy: 0
+                    }
+                  ];
+                  // 新素材を追加したら即それにする
+                  setTimeout(() => {
+                    setActiveAsset(next.length - 1);
+                    setTempAssetStore(next.length - 1);
+                    setSelIdx(-1);
+                    lockedIdRef.current = null;
+                    setMode("move");
+                    setShowAssetOverlay(false);
+                  }, 150);
+                  return next;
+                });
+              };
+              i2.src = src;
+            };
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(f);
+        }
+      };
+
+      // 基準座標マッピング保存
+      const handleRegisterMapping = () => {
+        const x0Val = parseFloat(coordInput.aX);
+        const y0Val = parseFloat(coordInput.aY);
+        const x1Val = parseFloat(coordInput.bX);
+        const y1Val = parseFloat(coordInput.bY);
+        const x2Val = parseFloat(coordInput.cX);
+        const y2Val = parseFloat(coordInput.cY);
+
+        if (isNaN(x0Val) || isNaN(y0Val) || isNaN(x1Val) || isNaN(y1Val) || isNaN(x2Val) || isNaN(y2Val)) {
+          alert("すべての座標に半角数値を入力してください。");
+          return;
+        }
+
+        const newMapping = {
+          refGx: coordMapping.refGx,
+          refGy: coordMapping.refGy,
+          x0: x0Val,
+          y0: y0Val,
+          x1: x1Val,
+          y1: y1Val,
+          x2: x2Val,
+          y2: y2Val,
+          isValid: true
+        };
+
+        setCoordMapping(newMapping);
+        localStorage.setItem("coord_mapping_v1", JSON.stringify(newMapping));
+
+        // 現在のマップ、ラインと新マッピングで即時ローカル保存
+        const key = currentRoomName ? `map_${currentRoomName}` : "map_v293";
+        localStorage.setItem(key, JSON.stringify({ m: map, l: lines, c: newMapping }));
+
+        setIsCoordSettingMode(false);
+        showToast("基準座標を登録し、等角マップ全体の自動計算を有効化しました！");
+      };
+
+      // 選択解除
+      const deselect = () => {
+        setActiveAsset(-1);
+        setTempAssetStore(-1);
+        setSelIdx(-1);
+        lockedIdRef.current = null;
+        setSelectedGrid(null);
+      };
+
+      // カメラを対象建物へ
+      const jumpToMember = (id) => {
+        const d = map.find((item) => item.id === id);
+        if (!d || !canvasRef.current) return;
+        const a = assets[d.aIdx];
+        const gw = a ? a.gw : 1;
+        const gh = a ? a.gh : 1;
+        const refX = d.x + gw - 1;
+        const refY = d.y + gh - 1;
+        const pos = toS(refX, refY);
+        camRef.current.x = canvasRef.current.width / 2 - pos.x * camRef.current.z;
+        camRef.current.y = canvasRef.current.height / 2 - pos.y * camRef.current.z;
+        
+        const idx = map.findIndex((item) => item.id === id);
+        setSelIdx(idx);
+        setSelectedGrid({ gx: refX, gy: refY });
+        setShowMemOverlay(false);
+      };
+
+      // メンバー名更新
+      const updateMemberName = (val) => {
+        if (isEditLocked) return;
+        if (selIdx !== -1) {
+          setMap((prev) => {
+            const next = [...prev];
+            next[selIdx] = { ...next[selIdx], mem: val };
+            return next;
+          });
+          saveLocalData();
+        }
+      };
+
+      // スライド操作反映
+      const updateItemScale = (scale) => {
+        if (isEditLocked || selIdx === -1) return;
+        setMap((prev) => {
+          const next = [...prev];
+          next[selIdx] = { ...next[selIdx], s: parseFloat(scale.toFixed(2)) };
+          return next;
+        });
+      };
+
+      const updateItemOffset = (offset) => {
+        if (isEditLocked || selIdx === -1) return;
+        setMap((prev) => {
+          const next = [...prev];
+          next[selIdx] = { ...next[selIdx], off: offset };
+          return next;
+        });
+      };
+
+      const adjScale = (v) => {
+        if (isEditLocked || selIdx === -1) return;
+        const currentItem = map[selIdx];
+        const newS = Math.max(0.1, parseFloat((currentItem.s + v).toFixed(2)));
+        updateItemScale(newS);
+        saveLocalData();
+      };
+
+      const adjOffset = (v) => {
+        if (isEditLocked || selIdx === -1) return;
+        const currentItem = map[selIdx];
+        const newO = currentItem.off + v;
+        updateItemOffset(newO);
+        saveLocalData();
+      };
+
+      const adjNudge = (dx, dy) => {
+        if (isEditLocked || selIdx === -1) return;
+        setMap((prev) => {
+          const next = [...prev];
+          next[selIdx] = {
+            ...next[selIdx],
+            ox: parseFloat((next[selIdx].ox + dx).toFixed(2)),
+            oy: parseFloat((next[selIdx].oy + dy).toFixed(2))
+          };
+          return next;
+        });
+        saveLocalData();
+      };
+
+      // マップ全初期化
+      const handleClearAll = () => {
+        if (isEditLocked) return;
+        if (clearClickCount === 0) {
+          setClearClickCount(1);
+          setTimeout(() => setClearClickCount(0), 4000);
+        } else {
+          setMap([]);
+          setLines([]);
+          setSelIdx(-1);
+          lockedIdRef.current = null;
+          setClearClickCount(0);
+          showToast("すべての配置をクリアしました");
+          saveLocalData();
+        }
+      };
+
+      // コピー動作
+      const handleCopyGridCoords = (gx, gy) => {
+        const coords = getGameCoords(gx, gy);
+        if (!coords) {
+          showToast("先に基準点の座標を登録してください");
+          return;
+        }
+        const txt = `${coords.x}:${coords.y}`;
+        navigator.clipboard.writeText(txt)
+          .then(() => {
+            showToast(`座標 ${txt} をコピーしました！`);
+          })
+          .catch((err) => {
+            console.error("Clipboard copy error:", err);
+            // fallback inside iframe
+            const el = document.createElement('textarea');
+            el.value = txt;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            showToast(`座標 ${txt} をコピーしました (FB)`);
+          });
+      };
+
+      // クォータービュー座標・画面座標変換公式
+      const toS = (gx, gy) => ({
+        x: (gx - gy) * (T_W / 2),
+        y: (gx + gy) * (T_H / 2)
+      });
+
+      const toG = (sx, sy) => {
+        const x = (sx - camRef.current.x) / camRef.current.z;
+        const y = (sy - camRef.current.y) / camRef.current.z;
+        const gy = (y / (T_H / 2) - x / (T_W / 2)) / 2;
+        return {
+          x: x / (T_W / 2) + gy,
+          y: gy
+        };
+      };
+
+      // 重複判定
+      const isBlocked = (gx, gy, gw, gh, ignoreId = null) => {
+        for (let x = gx; x < gx + gw; x++) {
+          for (let y = gy; y < gy + gh; y++) {
+            if (map.some((d) => d.id !== ignoreId && x >= Math.round(d.x) && x < Math.round(d.x) + assets[d.aIdx].gw && y >= Math.round(d.y) && y < Math.round(d.y) + assets[d.aIdx].gh)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+
+      // Canvasリサイズ
+      useEffect(() => {
+        const cvs = canvasRef.current;
+        if (!cvs) return;
+
+        const resizeObserver = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            const nw = entry.contentRect.width;
+            const nh = entry.contentRect.height;
+            
+            if (nw > 0 && nh > 0) {
+              if (cvs.width !== nw || cvs.height !== nh) {
+                if (cvs.width > 0) {
+                  camRef.current.x += (nw - cvs.width) / 2;
+                  camRef.current.y += (nh - cvs.height) / 2;
+                } else {
+                  camRef.current.x = nw / 2;
+                  camRef.current.y = nh / 3;
+                }
+                cvs.width = nw;
+                cvs.height = nh;
+                if (drawMapRef.current) {
+                  drawMapRef.current();
+                }
+              }
+            }
+          }
+        });
+
+        resizeObserver.observe(cvs);
+
+        // 初回初期サイズ設定
+        const parent = cvs.parentElement;
+        if (parent) {
+          const iw = parent.clientWidth;
+          const ih = parent.clientHeight;
+          if (iw > 0 && ih > 0) {
+            cvs.width = iw;
+            cvs.height = ih;
+            camRef.current.x = iw / 2;
+            camRef.current.y = ih / 3;
+            if (drawMapRef.current) {
+              drawMapRef.current();
+            }
+          }
+        }
+
+        return () => {
+          resizeObserver.disconnect();
+        };
+      }, []);
+
+      // 描画
+      const drawMap = () => {
+        const cvs = canvasRef.current;
+        if (!cvs) return;
+        const ctx = cvs.getContext("2d");
+        if (!ctx) return;
+
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        ctx.save();
+        ctx.translate(camRef.current.x, camRef.current.y);
+        ctx.scale(camRef.current.z, camRef.current.z);
+
+        // 1. グリッドの描画
+        ctx.strokeStyle = "rgba(0,0,0,0.08)";
+        ctx.lineWidth = 1 / camRef.current.z;
+        for (let i = -20; i <= 40; i++) {
+          let s = toS(i, -20);
+          let e = toS(i, 40);
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(e.x, e.y);
+          ctx.stroke();
+
+          s = toS(-20, i);
+          e = toS(40, i);
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(e.x, e.y);
+          ctx.stroke();
+        }
+
+        // 2. 特殊領地の描画
+        map.forEach((d) => {
+          const a = assets[d.aIdx];
+          if (!a) return;
+          if (a.name === "OP") {
+            drawTerritory(ctx, Math.round(d.x), Math.round(d.y), 5, "rgba(0, 122, 255, 0.12)");
+          } else if (a.name === "DOOM") {
+            drawTerritory(ctx, Math.round(d.x) + 1, Math.round(d.y) + 1, 6, "rgba(0, 122, 255, 0.12)");
+          }
+        });
+
+        // 3. ルート線 (赤) の描画
+        lines.forEach((l) => {
+          ctx.beginPath();
+          ctx.strokeStyle = "rgba(255,0,0,0.6)";
+          ctx.lineWidth = 4 / camRef.current.z;
+          const s = toS(l.x1, l.y1);
+          const e = toS(l.x2, l.y2);
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(e.x, e.y);
+          ctx.stroke();
+        });
+
+        // 4. 配置済み建物のソート・描画
+        const sorted = [...map].sort(
+          (a, b) => (Math.round(a.x) + Math.round(a.y)) - (Math.round(b.x) + Math.round(b.y))
+        );
+
+        sorted.forEach((d) => {
+          const a = assets[d.aIdx];
+          if (!a) return;
+          const w = T_W * d.s;
+          const h = (a.img.height / a.img.width) * w;
+          const anchor = toS(d.x + a.gw + d.ox, d.y + a.gh + d.oy);
+
+          ctx.save();
+          ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + d.off, w, h);
+          ctx.restore();
+
+          const isSelected = selIdx !== -1 && map[selIdx]?.id === d.id;
+          if (lockedIdRef.current === d.id || isSelected) {
+            ctx.strokeStyle = "#007aff";
+            ctx.lineWidth = (lockedIdRef.current === d.id ? 1 : 3) / camRef.current.z;
+            const gx = Math.round(d.x);
+            const gy = Math.round(d.y);
+            const pS = toS(gx + a.gw, gy + a.gh);
+            const pW = toS(gx, gy + a.gh);
+            const pE = toS(gx + a.gw, gy);
+            const pN = toS(gx, gy);
+
+            ctx.beginPath();
+            ctx.moveTo(pS.x, pS.y);
+            ctx.lineTo(pW.x, pW.y);
+            ctx.lineTo(pN.x, pN.y);
+            ctx.lineTo(pE.x, pE.y);
+            ctx.closePath();
+            ctx.stroke();
+          }
+        });
+
+        // 5. ギルメン名のバッジテキスト描画
+        sorted.forEach((d) => {
+          if (!d.mem) return;
+          const a = assets[d.aIdx];
+          if (!a) return;
+          ctx.save();
+          const fVal = 9.5 * d.s;
+          const pVal = 3.2 * d.s;
+          const rVal = 2.2 * d.s;
+          ctx.font = `bold ${fVal}px sans-serif`;
+          const pos = toS(d.x + a.gw / 2, d.y + a.gh / 2);
+          const txtW = ctx.measureText(d.mem).width;
+          const bgW = txtW + pVal * 2;
+          const bgH = fVal + pVal;
+
+          ctx.fillStyle = "rgba(0,0,0,0.8)";
+          ctx.beginPath();
+          ctx.roundRect(pos.x - bgW / 2, pos.y - bgH / 2, bgW, bgH, rVal);
+          ctx.fill();
+
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(d.mem, pos.x, pos.y);
+          ctx.restore();
+        });
+
+        // 6. ペンルート可視化
+        if (mode === "pen" && penStartRef.current && penCurrentRef.current) {
+          ctx.beginPath();
+          ctx.setLineDash([6 / camRef.current.z, 3 / camRef.current.z]);
+          ctx.strokeStyle = "rgba(255,0,0,0.8)";
+          ctx.lineWidth = 2 / camRef.current.z;
+          const s = toS(penStartRef.current.x, penStartRef.current.y);
+          const e = toS(penCurrentRef.current.x, penCurrentRef.current.y);
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(e.x, e.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // 7. 選択中マスの強調
+        if (selectedGrid) {
+          const { gx, gy } = selectedGrid;
+          ctx.strokeStyle = "#ff3b30";
+          ctx.lineWidth = 2 / camRef.current.z;
+          const pS = toS(gx + 1, gy + 1);
+          const pW = toS(gx, gy + 1);
+          const pE = toS(gx + 1, gy);
+          const pN = toS(gx, gy);
+
+          ctx.beginPath();
+          ctx.moveTo(pS.x, pS.y);
+          ctx.lineTo(pW.x, pW.y);
+          ctx.lineTo(pN.x, pN.y);
+          ctx.lineTo(pE.x, pE.y);
+          ctx.closePath();
+          ctx.stroke();
+
+          ctx.fillStyle = "#ff3b30";
+          const pinCenter = toS(gx + 0.5, gy + 0.5);
+          ctx.beginPath();
+          ctx.arc(pinCenter.x, pinCenter.y - 12 / camRef.current.z, 5 / camRef.current.z, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // 8. 座標設定用の基準点(L字型に連なった3マス)の描画
+        if (isCoordSettingMode) {
+          const rx = coordMapping.refGx;
+          const ry = coordMapping.refGy;
+
+          ctx.restore();
+          ctx.save();
+          ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+          ctx.fillRect(0, 0, cvs.width, cvs.height);
+          
+          ctx.translate(camRef.current.x, camRef.current.y);
+          ctx.scale(camRef.current.z, camRef.current.z);
+
+          const drawDiamond = (gx, gy, label) => {
+            const pS = toS(gx + 1, gy + 1);
+            const pW = toS(gx, gy + 1);
+            const pE = toS(gx + 1, gy);
+            const pN = toS(gx, gy);
+
+            ctx.fillStyle = "rgba(255, 149, 0, 0.35)";
+            ctx.beginPath();
+            ctx.moveTo(pS.x, pS.y);
+            ctx.lineTo(pW.x, pW.y);
+            ctx.lineTo(pN.x, pN.y);
+            ctx.lineTo(pE.x, pE.y);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = "#ff9500";
+            ctx.lineWidth = 3 / camRef.current.z;
+            ctx.stroke();
+
+            ctx.save();
+            ctx.font = `bold ${14 / camRef.current.z}px sans-serif`;
+            const cent = toS(gx + 0.5, gy + 0.5);
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowColor = "#ff9500";
+            ctx.shadowBlur = 8;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(label, cent.x, cent.y);
+            ctx.restore();
+          };
+
+          drawDiamond(rx, ry, "A");
+          drawDiamond(rx + 1, ry, "B");
+          drawDiamond(rx, ry + 1, "C");
+
+          ctx.strokeStyle = "rgba(255,149,0,0.5)";
+          ctx.setLineDash([4 / camRef.current.z, 4 / camRef.current.z]);
+          ctx.lineWidth = 1.5 / camRef.current.z;
+          ctx.beginPath();
+          const pA = toS(rx + 0.5, ry + 0.5);
+          const pB = toS(rx + 1.5, ry + 0.5);
+          const pC = toS(rx + 0.5, ry + 1.5);
+          ctx.moveTo(pB.x, pB.y);
+          ctx.lineTo(pA.x, pA.y);
+          ctx.lineTo(pC.x, pC.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        ctx.restore();
+      };
+      drawMapRef.current = drawMap;
+
+      const drawTerritory = (ctx, gx, gy, range, color) => {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        const p1 = toS(gx - range, gy - range);
+        const p2 = toS(gx + range + 1, gy - range);
+        const p3 = toS(gx + range + 1, gy + range + 1);
+        const p4 = toS(gx - range, gy + range + 1);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(0,122,255,0.3)";
+        ctx.lineWidth = 1 / camRef.current.z;
+        ctx.stroke();
+      };
+
+      // 依存更新
+      useEffect(() => {
+        drawMap();
+      }, [map, lines, selIdx, activeAsset, selectedGrid, coordMapping, isCoordSettingMode, assets]);
+
+      const zoom = (scaleChange, centerX, centerY) => {
+        const newZ = Math.min(Math.max(camRef.current.z * scaleChange, 0.1), 5);
+        const ratio = newZ / camRef.current.z;
+        camRef.current.x = centerX - (centerX - camRef.current.x) * ratio;
+        camRef.current.y = centerY - (centerY - camRef.current.y) * ratio;
+        camRef.current.z = newZ;
+        drawMap();
+      };
+
+      // 操作
+      const handleStart = (clientX, clientY) => {
+        if (guideMode) return;
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const canvasX = clientX - rect.left;
+        const canvasY = clientY - rect.top;
+
+        const rawG = toG(canvasX, canvasY);
+        const gx_o = Math.floor(rawG.x);
+        const gy_o = Math.floor(rawG.y);
+        const gx_p = Math.round(rawG.x);
+        const gy_p = Math.round(rawG.y);
+
+        if (isCoordSettingMode) {
+          const rx = coordMapping.refGx;
+          const ry = coordMapping.refGy;
+          const isTouchA = gx_o === rx && gy_o === ry;
+          const isTouchB = gx_o === rx + 1 && gy_o === ry;
+          const isTouchC = gx_o === rx && gy_o === ry + 1;
+
+          if (isTouchA || isTouchB || isTouchC) {
+            isDraggingCoordRef.current = true;
+            return;
+          }
+          
+          setCoordMapping(prev => ({ ...prev, refGx: gx_o, refGy: gy_o }));
+          isDraggingCoordRef.current = true;
+          return;
+        }
+
+        if (isEditLocked) {
+          setSelIdx(-1);
+          lockedIdRef.current = null;
+          dragRef.current = true;
+          setSelectedGrid({ gx: gx_o, gy: gy_o });
+          drawMap();
+          return;
+        }
+
+        if (mode === "pen") {
+          penStartRef.current = { x: gx_p, y: gy_p };
+          penCurrentRef.current = { x: gx_p, y: gy_p };
+          drawMap();
+          return;
+        }
+
+        if (mode === "p-erase") {
+          const distToSeg = (p, v, w) => {
+            const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
+            if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
+            let t = Math.max(0, Math.min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2));
+            return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
+          };
+
+          setLines((prev) => prev.filter((l) => distToSeg(rawG, { x: l.x1, y: l.y1 }, { x: l.x2, y: l.y2 }) > 0.5));
+          saveLocalData();
+          drawMap();
+          return;
+        }
+
+        let hitIdx = map.findLastIndex((d) => {
+          const a = assets[d.aIdx];
+          return a && rawG.x >= d.x && rawG.x < d.x + a.gw && rawG.y >= d.y && rawG.y < d.y + a.gh;
+        });
+
+        if (mode === "erase" && hitIdx !== -1) {
+          setMap((prev) => {
+            const next = [...prev];
+            next.splice(hitIdx, 1);
+            return next;
+          });
+          setSelIdx(-1);
+          saveLocalData();
+          setSelectedGrid(null);
+          drawMap();
+          return;
+        }
+
+        if (mode === "move") {
+          if (hitIdx !== -1) {
+            if (activeAsset !== -1) {
+              setTempAssetStore(activeAsset);
+            }
+            setActiveAsset(-1);
+            setSelIdx(hitIdx);
+            lockedIdRef.current = map[hitIdx].id;
+            const d = map[hitIdx];
+            const a = assets[d.aIdx];
+            const refX = Math.round(d.x) + (a ? a.gw - 1 : 0);
+            const refY = Math.round(d.y) + (a ? a.gh - 1 : 0);
+            setSelectedGrid({ gx: refX, gy: refY });
+            drawMap();
+            return;
+          }
+
+          if (activeAsset === -1 && tempAssetStore !== -1) {
+            setActiveAsset(tempAssetStore);
+          }
+
+          if (activeAsset !== -1) {
+            const a = assets[activeAsset];
+            if (a) {
+              const nx = gx_o - (a.gw - 1);
+              const ny = gy_o - (a.gh - 1);
+              if (!isBlocked(nx, ny, a.gw, a.gh)) {
+                const prev = [...map].reverse().find((d) => d.aIdx === activeAsset);
+                const newItem = {
+                  id: Date.now() + Math.random(),
+                  x: nx,
+                  y: ny,
+                  aIdx: activeAsset,
+                  s: prev ? prev.s : a.defS,
+                  off: prev ? prev.off : a.defO,
+                  ox: prev ? prev.ox : a.ox,
+                  oy: prev ? prev.oy : a.oy,
+                  mem: ""
+                };
+                setMap((prev) => [...prev, newItem]);
+                setTimeout(() => {
+                  setMap(currentMap => {
+                    const idx = currentMap.findIndex(item => item.id === newItem.id);
+                    setSelIdx(idx);
+                    return currentMap;
+                  });
+                  lockedIdRef.current = newItem.id;
+                  setSelectedGrid({ gx: nx + a.gw - 1, gy: ny + a.gh - 1 });
+                }, 50);
+                saveLocalData();
+                drawMap();
+                return;
+              }
+            }
+          }
+
+          setSelIdx(-1);
+          lockedIdRef.current = null;
+          dragRef.current = true;
+          setSelectedGrid({ gx: gx_o, gy: gy_o });
+          drawMap();
+        }
+      };
+
+      const handleMove = (clientX, clientY, dx, dy) => {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        const canvasX = rect ? clientX - rect.left : clientX;
+        const canvasY = rect ? clientY - rect.top : clientY;
+        const rawG = toG(canvasX, canvasY);
+
+        if (isCoordSettingMode && isDraggingCoordRef.current) {
+          const gx = Math.floor(rawG.x);
+          const gy = Math.floor(rawG.y);
+          setCoordMapping((prev) => ({
+            ...prev,
+            refGx: gx,
+            refGy: gy
+          }));
+          drawMap();
+          return;
+        }
+
+        if (mode === "pen" && penStartRef.current) {
+          penCurrentRef.current = { x: Math.round(rawG.x), y: Math.round(rawG.y) };
+          drawMap();
+          return;
+        }
+
+        if (lockedIdRef.current !== null) {
+          const dIdx = map.findIndex((d) => d.id === lockedIdRef.current);
+          if (dIdx !== -1) {
+            const d = map[dIdx];
+            const a = assets[d.aIdx];
+            if (a) {
+              const nx = Math.floor(rawG.x) - (a.gw - 1);
+              const ny = Math.floor(rawG.y) - (a.gh - 1);
+              if (!isBlocked(nx, ny, a.gw, a.gh, d.id)) {
+                setMap((prev) => {
+                  const next = [...prev];
+                  next[dIdx] = { ...next[dIdx], x: nx, y: ny };
+                  return next;
+                });
+                setSelIdx(dIdx);
+                setSelectedGrid({ gx: nx + a.gw - 1, gy: ny + a.gh - 1 });
+                saveLocalData();
+              }
+            }
+          }
+        } else if (dragRef.current) {
+          camRef.current.x += dx;
+          camRef.current.y += dy;
+        }
+        drawMap();
+      };
+
+      const handleEnd = () => {
+        if (mode === "pen" && penStartRef.current && penCurrentRef.current) {
+          const ps = penStartRef.current;
+          const pc = penCurrentRef.current;
+          if (ps.x !== pc.x || ps.y !== pc.y) {
+            setLines((prev) => [...prev, { x1: ps.x, y1: ps.y, x2: pc.x, y2: pc.y }]);
+            saveLocalData();
+          }
+        }
+        dragRef.current = false;
+        pinchRef.current = false;
+        lockedIdRef.current = null;
+        isDraggingCoordRef.current = false;
+        penStartRef.current = null;
+        penCurrentRef.current = null;
+        drawMap();
+      };
+
+      const exportImage = () => {
+        deselect();
+        drawMap();
+        const cvs = canvasRef.current;
+        if (!cvs) return;
+
+        const tempCvs = document.createElement("canvas");
+        const tempCtx = tempCvs.getContext("2d");
+        if (!tempCtx) return;
+
+        tempCvs.width = cvs.width;
+        tempCvs.height = cvs.height;
+        tempCtx.fillStyle = "#ffffff";
+        tempCtx.fillRect(0, 0, tempCvs.width, tempCvs.height);
+        tempCtx.drawImage(cvs, 0, 0);
+
+        setExportImageUrl(tempCvs.toDataURL("image/png"));
+      };
+
+      const toggleCoordSettingMode = () => {
+        setIsCoordSettingMode(!isCoordSettingMode);
+        if (!isCoordSettingMode) {
+          if (canvasRef.current) {
+            const centerG = toG(canvasRef.current.width / 2, canvasRef.current.height / 2);
+            setCoordMapping(prev => ({
+              ...prev,
+              refGx: Math.floor(centerG.x),
+              refGy: Math.floor(centerG.y)
+            }));
+          }
+          setSelectedGrid(null);
+        }
+      };
+
+      return (
+        <div className="fixed inset-0 select-none flex flex-col bg-[#e0e5ec] text-gray-800 font-sans touch-none overflow-hidden">
+          
+          <div className="flex-1 relative overflow-hidden" id="main-container">
+            <canvas 
+              ref={canvasRef} 
+              className="block bg-[#f0f0f0] w-full h-full cursor-crosshair"
+              onMouseDown={(e) => {
+                lastTRef.current = { x: e.clientX, y: e.clientY };
+                handleStart(e.clientX, e.clientY);
+              }}
+              onMouseMove={(e) => {
+                if (e.buttons === 1) {
+                  const dx = e.clientX - lastTRef.current.x;
+                  const dy = e.clientY - lastTRef.current.y;
+                  lastTRef.current = { x: e.clientX, y: e.clientY };
+                  handleMove(e.clientX, e.clientY, dx, dy);
+                }
+              }}
+              onMouseUp={handleEnd}
+              onMouseLeave={handleEnd}
+              
+              onTouchStart={(e) => {
+                if (e.touches.length === 1) {
+                  const t = e.touches[0];
+                  lastTRef.current = { x: t.clientX, y: t.clientY };
+                  handleStart(t.clientX, t.clientY);
+                } else if (e.touches.length === 2) {
+                  pinchRef.current = true;
+                  const dx = e.touches[0].clientX - e.touches[1].clientX;
+                  const dy = e.touches[0].clientY - e.touches[1].clientY;
+                  lastDistRef.current = Math.hypot(dx, dy);
+                }
+              }}
+              onTouchMove={(e) => {
+                if (e.touches.length === 1 && !pinchRef.current) {
+                  const t = e.touches[0];
+                  const dx = t.clientX - lastTRef.current.x;
+                  const dy = t.clientY - lastTRef.current.y;
+                  lastTRef.current = { x: t.clientX, y: t.clientY };
+                  handleMove(t.clientX, t.clientY, dx, dy);
+                } else if (e.touches.length === 2 && pinchRef.current) {
+                  const rect = canvasRef.current.getBoundingClientRect();
+                  const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+                  const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+                  
+                  const dx = e.touches[0].clientX - e.touches[1].clientX;
+                  const dy = e.touches[0].clientY - e.touches[1].clientY;
+                  const d = Math.hypot(dx, dy);
+                  if (lastDistRef.current > 0) {
+                    zoom(d / lastDistRef.current, cx, cy);
+                  }
+                  lastDistRef.current = d;
+                }
+              }}
+              onTouchEnd={(e) => {
+                if (e.touches.length === 0) {
+                  handleEnd();
+                }
+              }}
+              onWheel={(e) => {
+                const rect = canvasRef.current.getBoundingClientRect();
+                const scale = e.deltaY < 0 ? 1.08 : 0.92;
+                zoom(scale, e.clientX - rect.left, e.clientY - rect.top);
+              }}
+            />
+
+            {/* 画面左上のバッジ情報 */}
+            <div id="room-badge" className="absolute top-[75px] left-[15px] bg-black/85 text-white py-1.5 px-3 rounded-full text-xs font-bold z-[500] pointer-events-none shadow-md">
+              部屋: {currentRoomName ? currentRoomName : "未指定 (ローカル)"}
+            </div>
+
+            {/* コピー完了・各種トースト表示 */}
+            {copiedNotification && (
+              <div 
+                className="absolute top-24 left-1/2 bg-slate-900 text-white py-2 px-5 rounded-lg text-sm font-semibold shadow-lg z-[2500] text-center border border-slate-700 -translate-x-1/2 animate-toast"
+              >
+                {copiedNotification}
+              </div>
+            )}
+
+            {/* 同期ステータス */}
+            {syncStatus && (
+              <div 
+                id="sync-status" 
+                style={{ backgroundColor: syncStatus.color }}
+                className="absolute top-[75px] right-[65px] text-white py-1.5 px-3 rounded-full text-xs font-bold z-[500] shadow-md transition-all duration-300"
+              >
+                {syncStatus.text}
+              </div>
+            )}
+
+            {/* 右上のヘルプ・ガイドトリガー */}
+            <button 
+              id="guide-trigger" 
+              onClick={toggleGuideMode}
+              className={`absolute top-[75px] right-[15px] w-10 h-10 text-white rounded-full flex items-center justify-center font-bold text-xl z-[500] shadow-lg border-2 border-white cursor-pointer transition-colors ${guideMode ? "bg-[#ff3b30]" : "bg-[#007aff]/90"}`}
+            >
+              {guideMode ? "×" : "?"}
+            </button>
+
+            {/* ガイドメッセージ表示ボックス */}
+            {guideMode && (
+              <div 
+                id="guide-msg-box" 
+                className="absolute top-[125px] left-1/2 w-[85%] max-w-[400px] bg-black/90 text-white p-3.5 rounded-xl text-xs leading-relaxed z-[2500] text-center border border-white/20 shadow-xl -translate-x-1/2 animate-guide"
+              >
+                <div className="font-bold text-[#34c759] mb-1">💡 ガイドモード</div>
+                {guideText}
+              </div>
+            )}
+
+            {/* トップコントロールパネル */}
+            <div id="top-panel" className="absolute top-0 w-full h-[65px] bg-white/95 border-b border-gray-300 flex items-center px-1.5 sm:px-3.5 box-border z-[100] gap-1 sm:gap-2 shadow-sm">
+              <div 
+                id="cur-box" 
+                onClick={(e) => handleGuideClick('選択解除', e) || deselect()}
+                className={`w-10 h-10 sm:w-12 sm:h-12 border-2 border-[#007aff] rounded-lg bg-white bg-contain bg-no-repeat bg-center flex-shrink-0 cursor-pointer relative shadow-inner ${selIdx !== -1 || activeAsset !== -1 ? "after:content-['解除'] after:absolute after:bottom-[-2px] after:right-[-2px] after:bg-[#007aff] after:text-white after:text-[7px] sm:after:text-[8px] after:px-0.5 sm:after:px-1 after:rounded-md" : ""}`}
+                style={{ 
+                  backgroundImage: selIdx !== -1 && map[selIdx]?.aIdx !== undefined && assets[map[selIdx].aIdx]
+                    ? `url(${assets[map[selIdx].aIdx].src})` 
+                    : activeAsset !== -1 && assets[activeAsset] 
+                    ? `url(${assets[activeAsset].src})` 
+                    : "none" 
+                }}
+                title="選択解除"
+              />
+
+              <input 
+                type="text" 
+                id="member-name-in" 
+                placeholder={selIdx !== -1 ? "名前を入力" : "タップで名前指定"}
+                disabled={isEditLocked || selIdx === -1}
+                value={selIdx !== -1 && map[selIdx] ? map[selIdx].mem : ""}
+                onChange={(e) => updateMemberName(e.target.value)}
+                onClick={(e) => {
+                  if (guideMode) {
+                    handleGuideClick('ギルメン名', e);
+                    e.target.blur();
+                  }
+                }}
+                className="flex-1 h-10 sm:h-11 border border-gray-300 rounded-lg px-2 sm:px-3 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#007aff] bg-white disabled:bg-gray-100 disabled:text-gray-500 font-medium transition-all"
+              />
+
+              <button 
+                className="top-btn w-10 h-10 sm:w-11 sm:h-11 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 flex items-center justify-center flex-shrink-0 cursor-pointer shadow-sm text-base sm:text-lg"
+                onClick={(e) => handleGuideClick('名簿', e) || setShowMemOverlay(true)}
+                title="名簿"
+              >
+                👥
+              </button>
+              <button 
+                className="top-btn w-10 h-10 sm:w-11 sm:h-11 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 flex items-center justify-center flex-shrink-0 cursor-pointer shadow-sm text-base sm:text-lg"
+                onClick={(e) => handleGuideClick('素材追加', e) || setShowAssetOverlay(true)}
+                title="素材追加"
+              >
+                ＋
+              </button>
+              <button 
+                className={`top-clr-btn h-10 px-2 sm:px-3 rounded-lg text-white font-bold text-xs flex items-center justify-center flex-shrink-0 cursor-pointer border-none shadow-sm transition-colors ${clearClickCount === 1 ? "bg-amber-500 animate-pulse" : "bg-red-500 hover:bg-red-600"}`}
+                onClick={(e) => handleGuideClick('全消去', e) || handleClearAll()}
+                title="全消去"
+              >
+                {clearClickCount === 1 ? "確定" : "全消去"}
+              </button>
+            </div>
+
+          </div>
+
+          {/* ボトムパネル (各種操作スライダー、折りたたみ可能トレイ、モード選択) */}
+          <div 
+            id="bot-panel" 
+            className={`bg-white/98 border-t border-gray-300 px-3 pb-2 pt-0 box-border z-[100] flex flex-col gap-1.5 shrink-0 shadow-lg transition-all duration-300 ${isBotPanelCollapsed ? "h-[45px]" : "h-[228px] sm:h-[228px]"}`}
+          >
+            {/* 折りたたみトグル用のヘッダーバー */}
+            <div 
+              className="flex items-center justify-between py-1 px-3 -mx-3 border-b border-gray-200 bg-gray-50/90 hover:bg-gray-100 cursor-pointer active:bg-gray-200 transition-colors select-none"
+              onClick={(e) => {
+                if (e.target.closest(".prevent-collapse-toggle")) {
+                  return;
+                }
+                setIsBotPanelCollapsed(!isBotPanelCollapsed);
+              }}
+            >
+              {/* 左：閉じる/開く */}
+              <div className="flex items-center text-[11px] font-bold text-gray-600 gap-1">
+                {isBotPanelCollapsed ? (
+                  <>
+                    <ChevronUp size={14} className="text-[#007aff]" /> 
+                    <span className="text-[10px] sm:text-[11px]">調整パネルを開く</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown size={14} className="text-gray-400" />
+                    <span className="text-[10px] sm:text-[11px]">調整パネルを隠す</span>
+                  </>
+                )}
+              </div>
+
+              {/* 右：選択マスの簡易表示(コピー機能付き) */}
+              <div className="flex-1 flex justify-end items-center gap-1.5 pl-3 prevent-collapse-toggle">
+                {selectedGrid ? (
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-700 bg-white border border-gray-200 py-0.5 px-2 rounded-full shadow-sm max-w-[200px] truncate">
+                    <span className="truncate">
+                      📍 {coordMapping.isValid ? (
+                        `X:${getGameCoords(selectedGrid.gx, selectedGrid.gy)?.x} Y:${getGameCoords(selectedGrid.gx, selectedGrid.gy)?.y}`
+                      ) : (
+                        `マス:${Math.round(selectedGrid.gx)}:${Math.round(selectedGrid.gy)}`
+                      )}
+                    </span>
+                    {coordMapping.isValid && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCopyGridCoords(selectedGrid.gx, selectedGrid.gy);
+                        }}
+                        className="py-0.5 px-1.5 bg-[#007aff] hover:bg-[#007aff]/90 text-white rounded text-[8px] font-bold flex items-center gap-0.5 whitespace-nowrap"
+                      >
+                        <Copy size={8} />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-[9px] text-gray-400 truncate">
+                    タップで座標表示
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* スライドで表示/非表示になる本体コンテンツ */}
+            <div className={`flex flex-col gap-1.5 overflow-hidden transition-opacity duration-200 ${isBotPanelCollapsed ? "opacity-0 pointer-events-none h-0" : "opacity-100 h-full"}`}>
+              {/* サイズ調整スライダー */}
+              <div 
+                className="flex items-center gap-2 mt-0.5"
+                onClick={(e) => handleGuideClick('サイズ調整', e)}
+              >
+                <label className="text-[11px] font-bold w-9 shrink-0 text-gray-500">サイズ</label>
+                <button 
+                  disabled={isEditLocked || selIdx === -1}
+                  onClick={() => adjScale(-0.05)}
+                  className="w-8 h-7 sm:w-9 sm:h-8 text-base sm:text-lg border border-gray-300 bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 rounded-md text-[#007aff] cursor-pointer shrink-0 font-bold active:bg-gray-200 transition-colors pointer-events-auto"
+                >
+                  -
+                </button>
+                <input 
+                  type="range" 
+                  min="0.1" 
+                  max="5" 
+                  step="0.05"
+                  disabled={isEditLocked || selIdx === -1}
+                  value={selIdx !== -1 && map[selIdx] ? map[selIdx].s : 1}
+                  onChange={(e) => updateItemScale(parseFloat(e.target.value))}
+                  className="flex-1 h-7 sm:h-9 cursor-pointer accent-[#007aff]"
+                />
+                <button 
+                  disabled={isEditLocked || selIdx === -1}
+                  onClick={() => adjScale(0.05)}
+                  className="w-8 h-7 sm:w-9 sm:h-8 text-base sm:text-lg border border-gray-300 bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 rounded-md text-[#007aff] cursor-pointer shrink-0 font-bold active:bg-gray-200 transition-colors pointer-events-auto"
+                >
+                  +
+                </button>
+              </div>
+
+              {/* 接地位置調整スライダー */}
+              <div 
+                className="flex items-center gap-2"
+                onClick={(e) => handleGuideClick('接地調整', e)}
+              >
+                <label className="text-[11px] font-bold w-9 shrink-0 text-gray-500">接地</label>
+                <button 
+                  disabled={isEditLocked || selIdx === -1}
+                  onClick={() => adjOffset(-1)}
+                  className="w-8 h-7 sm:w-9 sm:h-8 text-base sm:text-lg border border-gray-300 bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 rounded-md text-[#007aff] cursor-pointer shrink-0 font-bold active:bg-gray-200 transition-colors pointer-events-auto"
+                >
+                  -
+                </button>
+                <input 
+                  type="range" 
+                  min="-100" 
+                  max="100" 
+                  step="1"
+                  disabled={isEditLocked || selIdx === -1}
+                  value={selIdx !== -1 && map[selIdx] ? map[selIdx].off : 0}
+                  onChange={(e) => updateItemOffset(parseInt(e.target.value))}
+                  className="flex-1 h-7 sm:h-9 cursor-pointer accent-[#007aff]"
+                />
+                <button 
+                  disabled={isEditLocked || selIdx === -1}
+                  onClick={() => adjOffset(1)}
+                  className="w-8 h-7 sm:w-9 sm:h-8 text-base sm:text-lg border border-gray-300 bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 rounded-md text-[#007aff] cursor-pointer shrink-0 font-bold active:bg-gray-200 transition-colors pointer-events-auto"
+                >
+                  +
+                </button>
+              </div>
+
+              {/* 素材移動・調整とモードコントロール */}
+              <div className="flex gap-2 sm:gap-2.5 w-full mt-0.5 sm:mt-1">
+                {/* 微調整用 3x3 グリッド十字 */}
+                <div 
+                  id="nudge-grid" 
+                  className="grid grid-cols-3 gap-0.5 w-[90px] sm:w-[120px] shrink-0"
+                  onClick={(e) => handleGuideClick('微調整', e)}
+                >
+                  <div />
+                  <button 
+                    id="nudge-up"
+                    disabled={isEditLocked || selIdx === -1}
+                    onClick={() => adjNudge(0, -0.1)}
+                    className="h-7 sm:h-8 border border-gray-300 bg-white disabled:bg-gray-100 disabled:text-gray-400 active:bg-gray-100 rounded-md font-bold text-[#007aff] flex items-center justify-center cursor-pointer transition-colors text-xs sm:text-sm"
+                  >
+                    ↑
+                  </button>
+                  <div />
+                  <button 
+                    id="nudge-left"
+                    disabled={isEditLocked || selIdx === -1}
+                    onClick={() => adjNudge(-0.1, 0)}
+                    className="h-7 sm:h-8 border border-gray-300 bg-white disabled:bg-gray-100 disabled:text-gray-400 active:bg-gray-100 rounded-md font-bold text-[#007aff] flex items-center justify-center cursor-pointer transition-colors text-xs sm:text-sm"
+                  >
+                    ←
+                  </button>
+                  <button 
+                    id="nudge-down"
+                    disabled={isEditLocked || selIdx === -1}
+                    onClick={() => adjNudge(0, 0.1)}
+                    className="h-7 sm:h-8 border border-gray-300 bg-white disabled:bg-gray-100 disabled:text-gray-400 active:bg-gray-100 rounded-md font-bold text-[#007aff] flex items-center justify-center cursor-pointer transition-colors text-xs sm:text-sm"
+                  >
+                    ↓
+                  </button>
+                  <button 
+                    id="nudge-right"
+                    disabled={isEditLocked || selIdx === -1}
+                    onClick={() => adjNudge(0.1, 0)}
+                    className="h-7 sm:h-8 border border-gray-300 bg-white disabled:bg-gray-100 disabled:text-gray-400 active:bg-gray-100 rounded-md font-bold text-[#007aff] flex items-center justify-center cursor-pointer transition-colors text-xs sm:text-sm"
+                  >
+                    →
+                  </button>
+                </div>
+
+                {/* モード切り替えパネル */}
+                <div className="flex-1 flex flex-col gap-1 justify-start overflow-hidden">
+                  {/* 任意座標登録とセーブボタン */}
+                  <div className="flex gap-1 w-full">
+                    <button 
+                      onClick={(e) => handleGuideClick('画像保存', e) || exportImage()}
+                      className="flex-1 h-7 sm:h-8 bg-green-500 hover:bg-green-600 active:bg-green-700 font-bold text-white text-[9px] sm:text-[10px] rounded-md shadow-sm transition-colors cursor-pointer text-center truncate px-0.5"
+                    >
+                      画像保存
+                    </button>
+                    <button 
+                      onClick={saveToCloud}
+                      className="flex-1 h-7 sm:h-8 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 font-bold text-white text-[9px] sm:text-[10px] rounded-md shadow-sm transition-colors cursor-pointer truncate px-0.5"
+                    >
+                      部屋保存
+                    </button>
+                    <button 
+                      onClick={(e) => handleGuideClick('座標登録', e) || toggleCoordSettingMode()}
+                      className={`flex-1 h-7 sm:h-8 font-bold text-[9px] sm:text-[10px] rounded-md shadow-sm transition-colors cursor-pointer border truncate px-0.5 ${isCoordSettingMode ? "bg-amber-500 hover:bg-amber-600 text-white border-amber-500 animate-pulse" : "bg-white hover:bg-gray-50 text-amber-600 border-amber-300"}`}
+                    >
+                      座標登録
+                    </button>
+                  </div>
+
+                  {/* 各種のドローイングツール、閲覧・移動ツール */}
+                  <div 
+                    className="flex gap-0.5 sm:gap-1 items-center"
+                    onClick={(e) => handleGuideClick('モード切替', e)}
+                  >
+                    <button 
+                      onClick={toggleEditLock}
+                      className={`w-7 sm:w-9 h-7 sm:h-8 rounded-md border flex items-center justify-center font-bold transition-all shadow-sm shrink-0 cursor-pointer ${isEditLocked ? "bg-amber-500 text-white border-amber-500 text-xs sm:text-sm" : "bg-white border-amber-500 text-amber-500 hover:bg-[#ff9500]/5 text-xs sm:text-sm"}`}
+                      title="編集ロック/閲覧モード"
+                    >
+                      {isEditLocked ? "🔒" : "🔓"}
+                    </button>
+
+                    <button 
+                      onClick={() => !isEditLocked && setMode("move")}
+                      disabled={isEditLocked}
+                      className={`flex-1 h-7 sm:h-8 font-bold text-[9px] sm:text-[10px] rounded-md border flex items-center justify-center gap-0.5 transition-all ${mode === "move" && !isEditLocked ? "bg-[#007aff] text-white border-[#007aff]" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"}`}
+                    >
+                      <Move size={11} /> <span className="hidden xs:inline">移動</span><span className="inline xs:hidden">移動</span>
+                    </button>
+
+                    <button 
+                      onClick={() => !isEditLocked && setMode("pen")}
+                      disabled={isEditLocked}
+                      className={`flex-1 h-7 sm:h-8 font-bold text-[9px] sm:text-[10px] rounded-md border flex items-center justify-center gap-0.5 transition-all ${mode === "pen" && !isEditLocked ? "bg-[#007aff] text-white border-[#007aff]" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"}`}
+                    >
+                      <PenTool size={11} /> <span className="hidden xs:inline">ペン</span><span className="inline xs:hidden">線</span>
+                    </button>
+
+                    <button 
+                      onClick={() => !isEditLocked && setMode("p-erase")}
+                      disabled={isEditLocked}
+                      className={`flex-1 h-7 sm:h-8 font-bold text-[9px] sm:text-[10px] rounded-md border flex items-center justify-center gap-0.5 transition-all ${mode === "p-erase" && !isEditLocked ? "bg-[#007aff] text-white border-[#007aff]" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"}`}
+                    >
+                      線消
+                    </button>
+
+                    <button 
+                      onClick={() => !isEditLocked && setMode("erase")}
+                      disabled={isEditLocked}
+                      className={`flex-1 h-7 sm:h-8 font-bold text-[9px] sm:text-[10px] rounded-md border flex items-center justify-center gap-0.5 transition-all ${mode === "erase" && !isEditLocked ? "bg-[#007aff] text-white border-[#007aff]" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"}`}
+                    >
+                      <Eraser size={11} /> <span className="hidden xs:inline">建物消</span><span className="inline xs:hidden">建物消</span>
+                    </button>
+                  </div>
+
+                  {/* 選択中のマスのゲーム内座標とコピーボタン */}
+                  <div className="flex items-center justify-between gap-1 h-7 sm:h-8 bg-gray-50 border border-gray-300 rounded-md px-1.5 text-[9px] sm:text-[10px] text-gray-700 font-bold shadow-inner">
+                    {selectedGrid ? (
+                      <>
+                        <span className="truncate flex items-center gap-0.5">
+                          📍 {coordMapping.isValid ? (
+                            `X:${getGameCoords(selectedGrid.gx, selectedGrid.gy)?.x}  Y:${getGameCoords(selectedGrid.gx, selectedGrid.gy)?.y}`
+                          ) : (
+                            `GIdx:${Math.round(selectedGrid.gx)}:${Math.round(selectedGrid.gy)}`
+                          )}
+                        </span>
+                        {coordMapping.isValid && (
+                          <button
+                            onClick={() => handleCopyGridCoords(selectedGrid.gx, selectedGrid.gy)}
+                            className="h-5 px-1 bg-[#007aff] hover:bg-[#007aff]/90 text-white rounded font-bold flex items-center gap-0.5 active:scale-95 transition-all text-[8px] tracking-tight shrink-0 cursor-pointer whitespace-nowrap"
+                          >
+                            <Copy size={9} /> コピー
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-[8px] sm:text-[9px] text-gray-400 truncate w-full text-center font-normal">
+                        タップして座標表示
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 1. 配置メンバー一覧名簿モーダル */}
+          {showMemOverlay && (
+            <div 
+              className="fixed inset-0 bg-black/70 z-[3000] flex items-center justify-center p-4"
+              onClick={() => setShowMemOverlay(false)}
+            >
+              <div 
+                className="w-full max-w-sm bg-[#f8f9fa] rounded-2xl p-5 flex flex-col gap-4 max-h-[80vh] shadow-2xl border border-gray-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-center border-b-2 border-[#007aff] pb-2">
+                  <h3 className="text-base font-bold text-gray-800 flex items-center gap-1.5">
+                    <Users size={18} className="text-[#007aff]" /> 配置済みメンバー一覧
+                  </h3>
+                  <button onClick={() => setShowMemOverlay(false)} className="text-gray-500 hover:text-gray-700 font-bold text-lg">
+                    ×
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-2 my-1">
+                  {map.filter(d => d.mem && d.mem.trim() !== "").length === 0 ? (
+                    <div className="text-center py-8 text-gray-400 text-sm font-medium">
+                      メンバーがまだ配置されていません
+                    </div>
+                  ) : (
+                    map
+                      .filter(d => d.mem && d.mem.trim() !== "")
+                      .sort((a, b) => a.mem.localeCompare(b.mem, "ja"))
+                      .map((m) => (
+                        <div 
+                          key={m.id}
+                          className="p-3 bg-white border border-gray-100 hover:border-[#007aff] rounded-lg text-sm flex justify-between items-center transition-all shadow-sm hover:shadow"
+                        >
+                          <span className="font-semibold text-gray-800">{m.mem}</span>
+                          <button 
+                            onClick={() => jumpToMember(m.id)}
+                            className="text-[#007aff] font-bold text-xs cursor-pointer hover:underline px-2 py-1 bg-sky-50 rounded"
+                          >
+                            表示 ▶
+                          </button>
+                        </div>
+                      ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. アセット素材選択モーダル */}
+          {showAssetOverlay && (
+            <div 
+              className="fixed inset-0 bg-black/70 z-[3000] flex items-center justify-center p-4"
+              onClick={() => setShowAssetOverlay(false)}
+            >
+              <div 
+                className="w-full max-w-md bg-[#f8f9fa] rounded-2xl p-5 flex flex-col gap-4 max-h-[80vh] shadow-2xl border border-gray-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-center border-b-2 border-[#007aff] pb-2">
+                  <h3 className="text-base font-bold text-gray-800 flex items-center gap-1.5">
+                    📦 建物素材アセット
+                  </h3>
+                  <button onClick={() => setShowAssetOverlay(false)} className="text-gray-500 hover:text-gray-700 font-bold text-lg">
+                    ×
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-4 gap-3 py-2">
+                  <label 
+                    className="aspect-square border-2 border-dashed border-gray-300 hover:border-[#007aff] bg-white rounded-xl flex flex-col justify-center items-center text-sm font-bold text-gray-400 hover:text-[#007aff] cursor-pointer transition-all hover:bg-indigo-50/20 shadow-sm"
+                  >
+                    <input 
+                      type="file" 
+                      hidden 
+                      accept="image/*" 
+                      multiple 
+                      onChange={(e) => handleFiles(e.target.files)} 
+                    />
+                    <Upload size={24} className="mb-1 text-gray-300" />
+                    <span className="text-[10px]">オリジナル</span>
+                  </label>
+
+                  {assets.map((a, idx) => (
+                    <div 
+                      key={idx}
+                      onClick={() => {
+                        if (isEditLocked) return;
+                        setActiveAsset(idx);
+                        setTempAssetStore(idx);
+                        setSelIdx(-1);
+                        lockedIdRef.current = null;
+                        setMode("move");
+                        setShowAssetOverlay(false);
+                      }}
+                      className={`aspect-square rounded-xl border bg-white bg-contain bg-no-repeat bg-center cursor-pointer transition-all hover:scale-105 shadow-sm relative ${activeAsset === idx ? "border-[#007aff] ring-2 ring-sky-300" : "border-gray-200 hover:border-[#007aff]"}`}
+                      style={{ backgroundImage: `url(${a.src})` }}
+                      title={a.name ? a.name : `カスタム素材 ${idx}`}
+                    >
+                      {a.name && (
+                        <span className="absolute bottom-1 right-1 bg-black/60 text-white rounded text-[8px] px-1 scale-90 origin-bottom-right">
+                          {a.name}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3. エクスポート画像オーバーレイ */}
+          {exportImageUrl && (
+            <div 
+              className="fixed inset-0 bg-black/85 z-[4000] flex flex-col items-center justify-center p-4 cursor-pointer gap-4"
+              onClick={() => setExportImageUrl(null)}
+            >
+              <div className="absolute top-4 right-4 text-white bg-slate-800 hover:bg-slate-700 py-1.5 px-3 rounded-full text-xs font-semibold shadow flex items-center gap-1">
+                画面クリックで閉じる <X size={14} />
+              </div>
+              <img 
+                src={exportImageUrl} 
+                alt="Export" 
+                className="max-w-[95%] max-h-[80vh] border-2 border-white rounded shadow-2xl object-contain"
+              />
+              <div className="text-white text-xs font-bold bg-black/70 px-4 py-2 rounded-lg text-center leading-normal">
+                画像を長押し、または右クリックして「画像を保存」してください。<br />
+                （全消去や赤線が重なっていない綺麗な配置図が出力されています）
+              </div>
+            </div>
+          )}
+
+          {/* 4. 座標登録設定モーダル */}
+          {isCoordSettingMode && (
+            <div 
+              className="fixed inset-x-0 top-[75px] bottom-[235px] z-[2000] bg-transparent pointer-events-none flex flex-col items-center justify-end p-4"
+            >
+              <div 
+                className="w-full max-w-sm bg-slate-900/98 border border-amber-600/50 backdrop-blur-md rounded-2xl p-4 shadow-2xl text-white flex flex-col gap-3 pointer-events-auto"
+              >
+                <div className="flex justify-between items-center border-b border-amber-500/30 pb-1.5">
+                  <h4 className="text-xs font-extrabold text-amber-400 flex items-center gap-1">
+                    📍 基準点(L字) 3か所の座標登録
+                  </h4>
+                  <button 
+                    onClick={() => setIsCoordSettingMode(false)}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <p className="text-[10px] text-slate-300 leading-normal">
+                  オレンジ色の3マスセット(A, B, C)をドラッグして、ゲーム内の座標が分かっているマスに置いてください。
+                  以下に各マスの「ゲーム内の本当の X:Y 座標」を入力してください。
+                </p>
+
+                <div className="flex flex-col gap-2 my-1">
+                  {/* 点A */}
+                  <div className="flex items-center gap-2 justify-between">
+                    <span className="text-[11px] font-bold text-amber-400 w-16 shrink-0">
+                      マスA (x:{coordMapping.refGx}, y:{coordMapping.refGy})
+                    </span>
+                    <div className="flex gap-1 flex-1">
+                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
+                        <span className="text-[10px] text-slate-400 mr-1 font-mono">X:</span>
+                        <input 
+                          type="number" 
+                          value={coordInput.aX}
+                          onChange={(e) => setCoordInput(prev => ({ ...prev, aX: e.target.value }))}
+                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
+                        />
+                      </div>
+                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
+                        <span className="text-[10px] text-slate-400 mr-1 font-mono">Y:</span>
+                        <input 
+                          type="number" 
+                          value={coordInput.aY}
+                          onChange={(e) => setCoordInput(prev => ({ ...prev, aY: e.target.value }))}
+                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 点B */}
+                  <div className="flex items-center gap-2 justify-between">
+                    <span className="text-[11px] font-bold text-amber-400 w-16 shrink-0">
+                      マスB (x:{coordMapping.refGx + 1}, y:{coordMapping.refGy})
+                    </span>
+                    <div className="flex gap-1 flex-1">
+                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
+                        <span className="text-[10px] text-slate-400 mr-1 font-mono">X:</span>
+                        <input 
+                          type="number" 
+                          value={coordInput.bX}
+                          onChange={(e) => setCoordInput(prev => ({ ...prev, bX: e.target.value }))}
+                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
+                        />
+                      </div>
+                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
+                        <span className="text-[10px] text-slate-400 mr-1 font-mono">Y:</span>
+                        <input 
+                          type="number" 
+                          value={coordInput.bY}
+                          onChange={(e) => setCoordInput(prev => ({ ...prev, bY: e.target.value }))}
+                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 点C */}
+                  <div className="flex items-center gap-2 justify-between">
+                    <span className="text-[11px] font-bold text-amber-400 w-16 shrink-0">
+                      マスC (x:{coordMapping.refGx}, y:{coordMapping.refGy + 1})
+                    </span>
+                    <div className="flex gap-1 flex-1">
+                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
+                        <span className="text-[10px] text-slate-400 mr-1 font-mono">X:</span>
+                        <input 
+                          type="number" 
+                          value={coordInput.cX}
+                          onChange={(e) => setCoordInput(prev => ({ ...prev, cX: e.target.value }))}
+                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
+                        />
+                      </div>
+                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
+                        <span className="text-[10px] text-slate-400 mr-1 font-mono">Y:</span>
+                        <input 
+                          type="number" 
+                          value={coordInput.cY}
+                          onChange={(e) => setCoordInput(prev => ({ ...prev, cY: e.target.value }))}
+                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 w-full mt-1.5">
+                  <button 
+                    onClick={() => setIsCoordSettingMode(false)}
+                    className="flex-1 py-2 bg-slate-800 hover:bg-slate-755 border border-slate-700 rounded-lg text-xs font-semibold text-slate-255 shadow transition-colors cursor-pointer"
+                  >
+                    キャンセル
+                  </button>
+                  <button 
+                    onClick={handleRegisterMapping}
+                    className="flex-[1.5] py-2 bg-amber-500 hover:bg-amber-600 rounded-lg text-xs font-bold text-white shadow shadow-amber-500/20 transition-colors cursor-pointer flex items-center justify-center gap-1"
+                  >
+                    登録して自動計算
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    // Render App
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<App />);
+  </script>
+</body>
+</html>
