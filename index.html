@@ -377,15 +377,15 @@
               const i2 = new Image();
               i2.onload = () => {
                 loadedAssets.push({
-                  img: i2,
-                  src,
-                  name: p.name,
-                  defS: p.s,
-                  defO: p.o,
-                  gw: p.gw,
-                  gh: p.gh,
-                  ox: p.ox,
-                  oy: p.oy
+                   img: i2,
+                   src,
+                   name: p.name,
+                   defS: p.s,
+                   defO: p.o,
+                   gw: p.gw,
+                   gh: p.gh,
+                   ox: p.ox,
+                   oy: p.oy
                 });
                 resolve();
               };
@@ -959,9 +959,18 @@
           const fVal = 9.5 * d.s;
           const pVal = 3.2 * d.s;
           const rVal = 2.2 * d.s;
-          ctx.font = `bold ${fVal}px sans-serif`;
+          
+          // クロスプラットフォームなフォールバックを考慮した強固なシステムフォントスタック
+          ctx.font = `bold ${fVal}px system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
           const pos = toS(d.x + a.gw / 2, d.y + a.gh / 2);
-          const txtW = ctx.measureText(d.mem).width;
+          
+          // 目に見えない制御文字や異体字セレクタ、双方向テキスト/RTL反転制御文字などを徹底的に消去
+          const cleanName = d.mem
+            .replace(/[\uFE00-\uFE0F\u200B-\u200D\u200E\u200F\uFEFF\u202A-\u202E\u2066-\u2069]/g, "")
+            .replace(/[\u{E0100}-\u{E01EF}]/gu, "")
+            .trim();
+
+          const txtW = ctx.measureText(cleanName).width;
           const bgW = txtW + pVal * 2;
           const bgH = fVal + pVal;
 
@@ -971,9 +980,9 @@
           ctx.fill();
 
           ctx.fillStyle = "#fff";
-          ctx.textAlign = "center";
+          ctx.textAlign = "left"; // centerからleftに変更し、描画開始位置を明示的に指定することで、左側の余白を常にpVal(パディング)に完全固定
           ctx.textBaseline = "middle";
-          ctx.fillText(d.mem, pos.x, pos.y);
+          ctx.fillText(cleanName, pos.x - txtW / 2, pos.y);
           ctx.restore();
         });
 
