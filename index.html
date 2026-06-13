@@ -1023,10 +1023,7 @@
             .replace(/[\u{E0100}-\u{E01EF}]/gu, "")
             .trim();
 
-          const groupName = d.groupIdx !== undefined && d.groupIdx !== -1 ? groupNames[d.groupIdx] : "";
-          const displayText = groupName ? `[${groupName}] ${cleanName}` : cleanName;
-
-          const txtW = ctx.measureText(displayText).width;
+          const txtW = ctx.measureText(cleanName).width;
           const bgW = txtW + pVal * 2;
           const bgH = fVal + pVal;
 
@@ -1044,7 +1041,7 @@
           ctx.fillStyle = "#fff";
           ctx.textAlign = "left"; // centerからleftに変更し、描画開始位置を明示的に指定することで、左側の余白を常にpVal(パディング)に完全固定
           ctx.textBaseline = "middle";
-          ctx.fillText(displayText, pos.x - txtW / 2, pos.y);
+          ctx.fillText(cleanName, pos.x - txtW / 2, pos.y);
           ctx.restore();
         });
 
