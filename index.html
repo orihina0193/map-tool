@@ -161,6 +161,7 @@
       const [guideMode, setGuideMode] = useState(false);
       const [guideText, setGuideText] = useState("ガイドモード：ボタンをタップして説明を表示");
       const [isEditLocked, setIsEditLocked] = useState(true);
+      const [roomPin, setRoomPin] = useState("");
       const [mode, setMode] = useState("move");
       
       // 新しい「座標登録モード」
@@ -310,11 +311,62 @@
 
       // 編集ロック
       const toggleEditLock = () => {
-        setIsEditLocked(!isEditLocked);
-        if (!isEditLocked) {
+        if (isEditLocked) {
+          // ロック解除時にPINが設定されていれば入力を求める
+          if (roomPin && roomPin.trim() !== "") {
+            const input = prompt("この部屋は編集ロックされています。\nPIN（暗証番号）を入力してください：");
+            if (input === null) return; // キャンセルされた場合
+            if (input !== roomPin) {
+              alert("PIN（暗証番号）が一致しません。");
+              return;
+            }
+          }
+          setIsEditLocked(false);
+        } else {
+          setIsEditLocked(true);
           setSelIdx(-1);
           lockedIdRef.current = null;
           setActiveAsset(-1);
+        }
+      };
+
+      // PINの登録・変更
+      const changePin = () => {
+        if (isEditLocked) return;
+        const newPin = prompt("部屋の編集ロック解除用PIN（暗証番号）を設定します。\n新しいPIN（暗証番号）を入力してください：\n（※何も入力せずにOKを押すと、PINロックは解除されて誰でも編集できるようになります）");
+        if (newPin === null) return; // キャンセル
+
+        const trimmed = newPin.trim();
+        setRoomPin(trimmed);
+        
+        showStatus("PIN変更を保存中...", "#ff9500", 0);
+        
+        // 暗黙的にローカルとクラウドを即時同期（設定し忘れ防止）
+        const rawStr = JSON.stringify({ m: map, l: lines, c: coordMapping, g: groupNames, p: trimmed });
+        const compressedStr = LZString.compressToEncodedURIComponent(rawStr);
+        
+        if (currentRoomName) {
+          fetch(API_ENDPOINT, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ room: currentRoomName, str: compressedStr })
+          })
+          .then(() => {
+            const key = `map_${currentRoomName}`;
+            localStorage.setItem(key, JSON.stringify({ m: map, l: lines, c: coordMapping, g: groupNames, p: trimmed }));
+            showStatus(trimmed ? "PINを設定しました！" : "PINロックを解除しました", "#34c759", 3000);
+          })
+          .catch((err) => {
+            console.error("Save PIN cloud error:", err);
+            const key = `map_${currentRoomName}`;
+            localStorage.setItem(key, JSON.stringify({ m: map, l: lines, c: coordMapping, g: groupNames, p: trimmed }));
+            showStatus("ローカルに保存しました", "#007aff", 3000);
+          });
+        } else {
+          const key = "map_v293";
+          localStorage.setItem(key, JSON.stringify({ m: map, l: lines, c: coordMapping, g: groupNames, p: trimmed }));
+          showStatus(trimmed ? "PINをローカルに設定しました" : "PINロックを解除しました", "#34c759", 3000);
         }
       };
 
@@ -473,6 +525,7 @@
               } else {
                 setGroupNames(["グループA", "グループB", "グループC"]);
               }
+              setRoomPin(d.p || d.pin || "");
               if (d.c) {
                 setCoordMapping(d.c);
                 setCoordInput({
@@ -514,7 +567,7 @@
         lockedIdRef.current = null;
         showStatus("保存中...", "#ff9500", 0);
 
-        const rawStr = JSON.stringify({ m: map, l: lines, c: coordMapping, g: groupNames });
+        const rawStr = JSON.stringify({ m: map, l: lines, c: coordMapping, g: groupNames, p: roomPin });
         const compressedStr = LZString.compressToEncodedURIComponent(rawStr);
 
         fetch(API_ENDPOINT, {
@@ -538,7 +591,7 @@
       // ローカル保存
       const saveLocalData = (roomName) => {
         const key = roomName ? `map_${roomName}` : "map_v293";
-        localStorage.setItem(key, JSON.stringify({ m: map, l: lines, c: coordMapping, g: groupNames }));
+        localStorage.setItem(key, JSON.stringify({ m: map, l: lines, c: coordMapping, g: groupNames, p: roomPin }));
       };
 
       // ローカル読込
@@ -550,6 +603,7 @@
             const d = JSON.parse(s);
             setMap(d.m || []);
             setLines(d.l || []);
+            setRoomPin(d.p || d.pin || "");
             if (d.g && Array.isArray(d.g)) {
               setGroupNames(d.g);
             } else {
@@ -570,6 +624,10 @@
           } catch (e) {
             console.error("Local load error:", e);
           }
+        } else {
+          setMap([]);
+          setLines([]);
+          setRoomPin("");
         }
       };
 
@@ -1862,6 +1920,16 @@
                     >
                       {isEditLocked ? "🔒" : "🔓"}
                     </button>
+
+                    {!isEditLocked && (
+                      <button
+                        onClick={changePin}
+                        className="h-7 sm:h-8 px-1.5 sm:px-2 bg-yellow-50 hover:bg-yellow-100 border border-amber-300 text-amber-700 rounded-md text-[9px] sm:text-[10px] font-bold flex items-center gap-0.5 sm:gap-1 transition-all cursor-pointer whitespace-nowrap shadow-sm animate-fade-in"
+                        title={roomPin ? "PINの変更" : "PINの新規登録"}
+                      >
+                        🔑 {roomPin ? "PIN変更" : "PIN設定"}
+                      </button>
+                    )}
 
                     <button 
                       onClick={() => !isEditLocked && setMode("move")}
