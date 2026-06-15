@@ -1076,12 +1076,6 @@
           ctx.lineTo(pE.x, pE.y);
           ctx.closePath();
           ctx.stroke();
-
-          ctx.fillStyle = "#ff3b30";
-          const pinCenter = toS(gx + 0.5, gy + 0.5);
-          ctx.beginPath();
-          ctx.arc(pinCenter.x, pinCenter.y - 12 / camRef.current.z, 5 / camRef.current.z, 0, Math.PI * 2);
-          ctx.fill();
         }
 
         // 8. 座標設定用の基準点(L字型に連なった3マス)の描画
