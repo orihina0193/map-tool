@@ -30,6 +30,13 @@
   
   <!-- Babel compiler CDN (runs in browser) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    Babel.registerPreset('classic-react', {
+      presets: [
+        [Babel.availablePresets['react'], { runtime: 'classic' }]
+      ]
+    });
+  </script>
   
   <!-- LZ-String compression CDN (decompress shared cloud strings) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
@@ -62,8 +69,7 @@
   <div id="root"></div>
 
   <!-- React App using Babel JSX compilation -->
-  <script type="text/babel">
-    /** @jsxRuntime classic */
+  <script type="text/babel" data-presets="classic-react">
     const { useState, useEffect, useRef } = React;
     
     // Custom wrapper for Lucide Icons in standalone browser HTML environment
