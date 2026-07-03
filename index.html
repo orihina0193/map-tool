@@ -667,12 +667,18 @@
         const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + "?room=" + trimmed;
         window.history.replaceState({ path: newUrl }, "", newUrl);
         
-        executeSave(trimmed);
+        if (trimmed === "OGsRoom") {
+          executeSave(trimmed);
+        } else {
+          // 新しい部屋の場合は、初回の作成時に自動的に申請を送信
+          handleRequestApproval(trimmed);
+        }
       };
 
       // 新規部屋の承認リクエスト送信
-      const handleRequestApproval = () => {
-        if (!currentRoomName) return;
+      const handleRequestApproval = (roomName) => {
+        const targetRoom = roomName || currentRoomName;
+        if (!targetRoom) return;
         setApprovalStatus("requesting");
         showStatus("申請を送信中...", "#ff9500", 0);
 
@@ -680,7 +686,7 @@
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "request", room: currentRoomName })
+          body: JSON.stringify({ action: "request", room: targetRoom })
         })
           .then(() => {
             setApprovalStatus("requested");
