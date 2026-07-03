@@ -146,7 +146,7 @@
     const X = (props) => <Icon name="x" {...props} />;
 
     // API GAS Endpoint configuration
-    const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbzQOcpj6K247JSfRYxy40hHzCiTPt5MYEbvNKT6S33KZ3Ncp1XzzOXkePn4rAMuki0Y/exec";
+    const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbzOlelOcP6d8bILIhHNz4bUsnCv34o2b3RcwZSQLi2bBb1P3aKaxGVXqxFzqTMSpL0r/exec";
 
     const T_W = 64;
     const T_H = 32;
@@ -217,6 +217,7 @@
       // カスタムダイアログ（プロンプト・アラート代替用）
       const [activeDialog, setActiveDialog] = useState(null);
       const [dialogInput, setDialogInput] = useState("");
+      const [approvalStatus, setApprovalStatus] = useState(null);
 
       // キャンバス / カメラ Ref
       const canvasRef = useRef(null);
@@ -541,7 +542,24 @@
           .then((res) => res.text())
           .then((text) => {
             if (text && text.trim() !== "") {
-              const d = JSON.parse(LZString.decompressFromEncodedURIComponent(text));
+              const trimmedText = text.trim();
+              if (trimmedText === "NOT_APPROVED") {
+                setApprovalStatus("not_approved");
+                setActiveDialog("approval_required");
+                showStatus("承認が必要です", "#ff3b30");
+                loadLocalData();
+                return;
+              }
+              if (trimmedText === "PENDING") {
+                setApprovalStatus("pending");
+                setActiveDialog("approval_required");
+                showStatus("承認待ちです", "#ff9500");
+                loadLocalData();
+                return;
+              }
+
+              setApprovalStatus("approved");
+              const d = JSON.parse(LZString.decompressFromEncodedURIComponent(trimmedText));
               setMap(d.m || []);
               setLines(d.l || []);
               if (d.g && Array.isArray(d.g)) {
@@ -564,6 +582,7 @@
               }
               showStatus("同期完了", "#34c759");
             } else {
+              setApprovalStatus("approved");
               showStatus("新規データです", "#007aff");
               loadLocalData();
             }
@@ -577,6 +596,12 @@
 
       // 実際のクラウドデータ保存処理
       const executeSave = (roomName) => {
+        if (approvalStatus === "not_approved" || approvalStatus === "pending") {
+          showToast("⚠️ このお部屋はまだ承認されていないため、サーバーに保存できません。");
+          setActiveDialog("approval_required");
+          return;
+        }
+
         setSelIdx(-1);
         lockedIdRef.current = null;
         showStatus("保存中...", "#ff9500", 0);
@@ -609,6 +634,11 @@
           setActiveDialog("room_name");
           return;
         }
+        if (approvalStatus === "not_approved" || approvalStatus === "pending") {
+          showToast("⚠️ このお部屋はまだ承認されていないため、サーバーに保存できません。");
+          setActiveDialog("approval_required");
+          return;
+        }
         executeSave(currentRoomName);
       };
 
@@ -626,6 +656,31 @@
         window.history.replaceState({ path: newUrl }, "", newUrl);
         
         executeSave(trimmed);
+      };
+
+      // 新規部屋の承認リクエスト送信
+      const handleRequestApproval = () => {
+        if (!currentRoomName) return;
+        setApprovalStatus("requesting");
+        showStatus("申請を送信中...", "#ff9500", 0);
+
+        fetch(API_ENDPOINT, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "request", room: currentRoomName })
+        })
+          .then(() => {
+            setApprovalStatus("requested");
+            showStatus("申請を送信しました", "#34c759");
+            showToast("📝 部屋の作成申請を送信しました。管理者の承認をお待ちください。");
+          })
+          .catch((err) => {
+            console.error("Request approval error:", err);
+            setApprovalStatus("not_approved");
+            showStatus("申請に失敗しました", "#ff3b30");
+            showToast("⚠️ 申請の送信に失敗しました。時間をおいて再度お試しください。");
+          });
       };
 
       // ローカル保存
@@ -2597,6 +2652,96 @@
                         保存する
                       </button>
                     </div>
+                  </>
+                )}
+
+                {activeDialog === "approval_required" && (
+                  <>
+                    {approvalStatus === "not_approved" && (
+                      <>
+                        <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                          <span className="text-xl">🔐</span>
+                          <h3 className="text-base font-bold text-gray-800">
+                            部屋の作成承認が必要です
+                          </h3>
+                        </div>
+                        <p className="text-xs text-gray-600 leading-normal">
+                          「<strong>{currentRoomName}</strong>」はまだ登録・承認されていません。<br /><br />
+                          いたずらや容量過多を防ぐため、新規の部屋作成は管理者による承認制となっています。この部屋の作成申請（リクエスト）を管理者に送信しますか？
+                        </p>
+                        <div className="flex gap-2.5 mt-2">
+                          <button 
+                            onClick={() => setActiveDialog(null)}
+                            className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-gray-600 transition-colors cursor-pointer"
+                          >
+                            キャンセル
+                          </button>
+                          <button 
+                            onClick={handleRequestApproval}
+                            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-xl text-xs font-bold text-white shadow shadow-blue-500/10 transition-colors cursor-pointer"
+                          >
+                            作成を申請する
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {approvalStatus === "pending" && (
+                      <>
+                        <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                          <span className="text-xl">⏳</span>
+                          <h3 className="text-base font-bold text-gray-800">
+                            承認待ちです
+                          </h3>
+                        </div>
+                        <p className="text-xs text-gray-600 leading-normal text-center">
+                          お部屋「<strong>{currentRoomName}</strong>」は、現在管理者の承認待ちです。<br /><br />
+                          管理者が承認すると、自動的に保存やクラウド同期ができるようになります。もうしばらくお待ちください。
+                        </p>
+                        <div className="flex gap-2.5 mt-2">
+                          <button 
+                            onClick={() => setActiveDialog(null)}
+                            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 rounded-xl text-xs font-bold text-white shadow shadow-blue-500/10 transition-colors cursor-pointer"
+                          >
+                            閉じる
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {approvalStatus === "requesting" && (
+                      <>
+                        <div className="flex flex-col items-center justify-center p-6 gap-3">
+                          <div className="w-8 h-8 border-[3px] border-blue-500/20 border-t-blue-600 rounded-full animate-spin"></div>
+                          <p className="text-xs font-bold text-gray-600">
+                            申請を送信しています...
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    {approvalStatus === "requested" && (
+                      <>
+                        <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                          <span className="text-xl">✅</span>
+                          <h3 className="text-base font-bold text-gray-800">
+                            申請完了しました！
+                          </h3>
+                        </div>
+                        <p className="text-xs text-gray-600 leading-normal text-center">
+                          お部屋「<strong>{currentRoomName}</strong>」の新規作成リクエストを送信しました！<br /><br />
+                          管理者が承認するまでお待ちください。承認が完了するとマップを保存できるようになります。
+                        </p>
+                        <div className="flex gap-2.5 mt-2">
+                          <button 
+                            onClick={() => setActiveDialog(null)}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs font-bold text-white shadow shadow-emerald-500/10 transition-colors cursor-pointer"
+                          >
+                            了解
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
