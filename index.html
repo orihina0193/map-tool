@@ -191,6 +191,7 @@
         bX: "101", bY: "100",
         cX: "100", cY: "101"
       });
+      const [isCoordFormExpanded, setIsCoordFormExpanded] = useState(true);
 
       // タップ/クリックされた現在のマス座標（X:Y コピー用等）
       const [selectedGrid, setSelectedGrid] = useState(null);
@@ -212,6 +213,10 @@
       const [showMemOverlay, setShowMemOverlay] = useState(false);
       const [showAssetOverlay, setShowAssetOverlay] = useState(false);
       const [exportImageUrl, setExportImageUrl] = useState(null);
+
+      // カスタムダイアログ（プロンプト・アラート代替用）
+      const [activeDialog, setActiveDialog] = useState(null);
+      const [dialogInput, setDialogInput] = useState("");
 
       // キャンバス / カメラ Ref
       const canvasRef = useRef(null);
@@ -321,14 +326,11 @@
         if (isEditLocked) {
           // ロック解除時にPINが設定されていれば入力を求める
           if (roomPin && roomPin.trim() !== "") {
-            const input = prompt("この部屋は編集ロックされています。\nPIN（暗証番号）を入力してください：");
-            if (input === null) return; // キャンセルされた場合
-            if (input !== roomPin) {
-              alert("PIN（暗証番号）が一致しません。");
-              return;
-            }
+            setDialogInput("");
+            setActiveDialog("unlock");
+          } else {
+            setIsEditLocked(false);
           }
-          setIsEditLocked(false);
         } else {
           setIsEditLocked(true);
           setSelIdx(-1);
@@ -340,11 +342,26 @@
       // PINの登録・変更
       const changePin = () => {
         if (isEditLocked) return;
-        const newPin = prompt("部屋の編集ロック解除用PIN（暗証番号）を設定します。\n新しいPIN（暗証番号）を入力してください：\n（※何も入力せずにOKを押すと、PINロックは解除されて誰でも編集できるようになります）");
-        if (newPin === null) return; // キャンセル
+        setDialogInput(roomPin || "");
+        setActiveDialog("set_pin");
+      };
 
-        const trimmed = newPin.trim();
+      // カスタムダイアログ送信ハンドラー：ロック解除
+      const handleUnlockSubmit = () => {
+        if (dialogInput === roomPin) {
+          setIsEditLocked(false);
+          setActiveDialog(null);
+          showToast("ロックを解除しました");
+        } else {
+          showToast("❌ PINが一致しません");
+        }
+      };
+
+      // カスタムダイアログ送信ハンドラー：PIN設定
+      const handleSetPinSubmit = () => {
+        const trimmed = dialogInput.trim();
         setRoomPin(trimmed);
+        setActiveDialog(null);
         
         showStatus("PIN変更を保存中...", "#ff9500", 0);
         
@@ -558,18 +575,8 @@
           });
       };
 
-      // クラウド保存
-      const saveToCloud = () => {
-        let room = currentRoomName;
-        if (!room) {
-          const inputName = prompt("部屋名を入力してください（例: orange）");
-          if (!inputName || inputName.trim() === "") return;
-          room = inputName.trim();
-          setCurrentRoomName(room);
-          const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + "?room=" + room;
-          window.history.replaceState({ path: newUrl }, "", newUrl);
-        }
-
+      // 実際のクラウドデータ保存処理
+      const executeSave = (roomName) => {
         setSelIdx(-1);
         lockedIdRef.current = null;
         showStatus("保存中...", "#ff9500", 0);
@@ -581,18 +588,44 @@
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ room, str: compressedStr })
+          body: JSON.stringify({ room: roomName, str: compressedStr })
         })
           .then(() => {
             showStatus("保存完了しました！", "#34c759");
-            saveLocalData(room);
+            saveLocalData(roomName);
           })
           .catch((err) => {
             console.error("Save cloud error:", err);
             showStatus("保存エラー", "#ff3b30");
-            alert("サーバー保存に失敗しました。ローカルに保存します。");
-            saveLocalData(room);
+            showToast("⚠️ サーバー保存失敗、ローカルに保存しました");
+            saveLocalData(roomName);
           });
+      };
+
+      // クラウド保存（トリガー）
+      const saveToCloud = () => {
+        if (!currentRoomName) {
+          setDialogInput("");
+          setActiveDialog("room_name");
+          return;
+        }
+        executeSave(currentRoomName);
+      };
+
+      // カスタムダイアログ送信ハンドラー：部屋名決定・保存
+      const handleRoomNameSubmit = () => {
+        const trimmed = dialogInput.trim();
+        if (!trimmed) {
+          showToast("部屋名を入力してください。");
+          return;
+        }
+        setCurrentRoomName(trimmed);
+        setActiveDialog(null);
+        
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + "?room=" + trimmed;
+        window.history.replaceState({ path: newUrl }, "", newUrl);
+        
+        executeSave(trimmed);
       };
 
       // ローカル保存
@@ -1156,13 +1189,13 @@
           ctx.translate(camRef.current.x, camRef.current.y);
           ctx.scale(camRef.current.z, camRef.current.z);
 
-          const drawDiamond = (gx, gy, label) => {
+          const drawDiamond = (gx, gy, label, fillStyle, strokeStyle) => {
             const pS = toS(gx + 1, gy + 1);
             const pW = toS(gx, gy + 1);
             const pE = toS(gx + 1, gy);
             const pN = toS(gx, gy);
 
-            ctx.fillStyle = "rgba(255, 149, 0, 0.35)";
+            ctx.fillStyle = fillStyle;
             ctx.beginPath();
             ctx.moveTo(pS.x, pS.y);
             ctx.lineTo(pW.x, pW.y);
@@ -1171,7 +1204,7 @@
             ctx.closePath();
             ctx.fill();
 
-            ctx.strokeStyle = "#ff9500";
+            ctx.strokeStyle = strokeStyle;
             ctx.lineWidth = 3 / camRef.current.z;
             ctx.stroke();
 
@@ -1179,7 +1212,7 @@
             ctx.font = `bold ${14 / camRef.current.z}px sans-serif`;
             const cent = toS(gx + 0.5, gy + 0.5);
             ctx.fillStyle = "#ffffff";
-            ctx.shadowColor = "#ff9500";
+            ctx.shadowColor = strokeStyle;
             ctx.shadowBlur = 8;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
@@ -1187,9 +1220,10 @@
             ctx.restore();
           };
 
-          drawDiamond(rx, ry, "A");
-          drawDiamond(rx + 1, ry, "B");
-          drawDiamond(rx, ry + 1, "C");
+          // A (rx, ry)＝緑🟢, B (rx+1, ry)＝青🔵, C (rx, ry+1)＝赤🔴 のL字に色分け
+          drawDiamond(rx, ry, "A", "rgba(34, 197, 94, 0.35)", "#22c55e");     // 緑 (🟢 マスA)
+          drawDiamond(rx + 1, ry, "B", "rgba(59, 130, 246, 0.35)", "#3b82f6"); // 青 (🔵 マスB)
+          drawDiamond(rx, ry + 1, "C", "rgba(239, 68, 68, 0.35)", "#ef4444");  // 赤 (🔴 マスC)
 
           ctx.strokeStyle = "rgba(255,149,0,0.5)";
           ctx.setLineDash([4 / camRef.current.z, 4 / camRef.current.z]);
@@ -1399,7 +1433,6 @@
             refGx: gx,
             refGy: gy
           }));
-          drawMap();
           return;
         }
 
@@ -1486,6 +1519,14 @@
           }
           setSelectedGrid(null);
         }
+      };
+
+      const moveRefG = (dx, dy) => {
+        setCoordMapping(prev => ({
+          ...prev,
+          refGx: prev.refGx + dx,
+          refGy: prev.refGy + dy
+        }));
       };
 
       return (
@@ -1795,7 +1836,7 @@
                 {/* 微調整用 3x3 グリッド十字 */}
                 <div 
                   id="nudge-grid" 
-                  className="grid grid-cols-3 gap-0.5 w-[90px] sm:w-[120px] shrink-0"
+                  className="grid grid-cols-3 gap-0.5 w-[90px] sm:w-[120px] shrink-0 self-center"
                   onClick={(e) => handleGuideClick('微調整', e)}
                 >
                   <div />
@@ -2136,125 +2177,428 @@
           {/* 4. 座標登録設定モーダル */}
           {isCoordSettingMode && (
             <div 
-              className="fixed inset-x-0 top-[75px] bottom-[235px] z-[2000] bg-transparent pointer-events-none flex flex-col items-center justify-end p-4"
+              className={`fixed inset-0 z-[2000] pointer-events-none flex flex-col items-center justify-end sm:justify-center p-2 sm:p-4 transition-colors ${isCoordFormExpanded ? "bg-black/35" : "bg-transparent"}`}
             >
               <div 
-                className="w-full max-w-sm bg-slate-900/98 border border-amber-600/50 backdrop-blur-md rounded-2xl p-4 shadow-2xl text-white flex flex-col gap-3 pointer-events-auto"
+                className={`w-full max-w-sm bg-slate-900/98 border border-amber-600/50 backdrop-blur-md rounded-2xl p-4 shadow-2xl text-white flex flex-col gap-3 pointer-events-auto transition-all ${isCoordFormExpanded ? "max-h-[85vh] overflow-y-auto" : "mb-2 sm:mb-0"}`}
               >
-                <div className="flex justify-between items-center border-b border-amber-500/30 pb-1.5">
-                  <h4 className="text-xs font-extrabold text-amber-400 flex items-center gap-1">
-                    📍 基準点(L字) 3か所の座標登録
-                  </h4>
-                  <button 
-                    onClick={() => setIsCoordSettingMode(false)}
-                    className="text-slate-400 hover:text-white"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-
-                <p className="text-[10px] text-slate-300 leading-normal">
-                  オレンジ色の3マスセット(A, B, C)をドラッグして、ゲーム内の座標が分かっているマスに置いてください。
-                  以下に各マスの「ゲーム内の本当の X:Y 座標」を入力してください。
-                </p>
-
-                <div className="flex flex-col gap-2 my-1">
-                  {/* 点A */}
-                  <div className="flex items-center gap-2 justify-between">
-                    <span className="text-[11px] font-bold text-amber-400 w-16 shrink-0">
-                      マスA (x:{coordMapping.refGx}, y:{coordMapping.refGy})
-                    </span>
-                    <div className="flex gap-1 flex-1">
-                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
-                        <span className="text-[10px] text-slate-400 mr-1 font-mono">X:</span>
-                        <input 
-                          type="number" 
-                          value={coordInput.aX}
-                          onChange={(e) => setCoordInput(prev => ({ ...prev, aX: e.target.value }))}
-                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
-                        />
-                      </div>
-                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
-                        <span className="text-[10px] text-slate-400 mr-1 font-mono">Y:</span>
-                        <input 
-                          type="number" 
-                          value={coordInput.aY}
-                          onChange={(e) => setCoordInput(prev => ({ ...prev, aY: e.target.value }))}
-                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
-                        />
-                      </div>
-                    </div>
+                <div className="flex justify-between items-center border-b border-amber-500/30 pb-2">
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <h4 className="text-xs sm:text-sm font-extrabold text-amber-400 flex items-center gap-1.5 whitespace-nowrap">
+                      📍 基準点(L字)の座標登録
+                    </h4>
+                    {!isCoordFormExpanded && (
+                      <span className="text-[8px] text-slate-400">マップを見ながら微調整中</span>
+                    )}
                   </div>
-
-                  {/* 点B */}
-                  <div className="flex items-center gap-2 justify-between">
-                    <span className="text-[11px] font-bold text-amber-400 w-16 shrink-0">
-                      マスB (x:{coordMapping.refGx + 1}, y:{coordMapping.refGy})
-                    </span>
-                    <div className="flex gap-1 flex-1">
-                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
-                        <span className="text-[10px] text-slate-400 mr-1 font-mono">X:</span>
-                        <input 
-                          type="number" 
-                          value={coordInput.bX}
-                          onChange={(e) => setCoordInput(prev => ({ ...prev, bX: e.target.value }))}
-                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
-                        />
-                      </div>
-                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
-                        <span className="text-[10px] text-slate-400 mr-1 font-mono">Y:</span>
-                        <input 
-                          type="number" 
-                          value={coordInput.bY}
-                          onChange={(e) => setCoordInput(prev => ({ ...prev, bY: e.target.value }))}
-                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 点C */}
-                  <div className="flex items-center gap-2 justify-between">
-                    <span className="text-[11px] font-bold text-amber-400 w-16 shrink-0">
-                      マスC (x:{coordMapping.refGx}, y:{coordMapping.refGy + 1})
-                    </span>
-                    <div className="flex gap-1 flex-1">
-                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
-                        <span className="text-[10px] text-slate-400 mr-1 font-mono">X:</span>
-                        <input 
-                          type="number" 
-                          value={coordInput.cX}
-                          onChange={(e) => setCoordInput(prev => ({ ...prev, cX: e.target.value }))}
-                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
-                        />
-                      </div>
-                      <div className="flex items-center bg-slate-800 rounded px-1.5 flex-1 ring-1 ring-slate-700">
-                        <span className="text-[10px] text-slate-400 mr-1 font-mono">Y:</span>
-                        <input 
-                          type="number" 
-                          value={coordInput.cY}
-                          onChange={(e) => setCoordInput(prev => ({ ...prev, cY: e.target.value }))}
-                          className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1 font-bold" 
-                        />
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setIsCoordFormExpanded(!isCoordFormExpanded)}
+                      className="text-[10px] font-extrabold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2 py-1 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                      title={isCoordFormExpanded ? "マップを広く見ながら位置調整" : "フォームを開いて座標を入力"}
+                    >
+                      {isCoordFormExpanded ? "🗺️ マップ確認" : "✍️ 座標入力"}
+                    </button>
+                    <button 
+                      onClick={() => setIsCoordSettingMode(false)}
+                      className="text-slate-400 hover:text-white p-1"
+                    >
+                      <X size={18} />
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex gap-2 w-full mt-1.5">
-                  <button 
-                    onClick={() => setIsCoordSettingMode(false)}
-                    className="flex-1 py-2 bg-slate-800 hover:bg-slate-755 border border-slate-700 rounded-lg text-xs font-semibold text-slate-255 shadow transition-colors cursor-pointer"
-                  >
-                    キャンセル
-                  </button>
-                  <button 
-                    onClick={handleRegisterMapping}
-                    className="flex-[1.5] py-2 bg-amber-500 hover:bg-amber-600 rounded-lg text-xs font-bold text-white shadow shadow-amber-500/20 transition-colors cursor-pointer flex items-center justify-center gap-1"
-                  >
-                    登録して自動計算
-                  </button>
-                </div>
+                {isCoordFormExpanded ? (
+                  <>
+                    <p className="text-[10px] text-slate-300 leading-normal">
+                      マップ上の緑🟢・青🔵・赤🔴の3マスセット(A, B, C)をドラッグするか、下の十字ボタンでゲーム内座標が判明しているマスに置いてください。
+                      その後、各マスの「ゲーム内の本当の X:Y 座標」を半角数字で入力してください。
+                    </p>
+
+                    {/* 基準点位置の微調整十字キー */}
+                    <div className="flex items-center justify-between bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 gap-2">
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                        <span className="text-[10px] font-extrabold text-amber-400 flex items-center gap-1">
+                          🧭 基準点の位置微調整
+                        </span>
+                        <span className="text-[8px] sm:text-[9px] text-slate-400 leading-tight">
+                          指でドラッグしにくい時は、この十字ボタンで1マスずつ位置を合わせられます。
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-1 w-[74px] shrink-0">
+                        <div />
+                        <button 
+                          onClick={() => moveRefG(0, -1)}
+                          className="h-6 bg-amber-500/25 hover:bg-amber-500/40 border border-amber-500/40 active:scale-90 text-amber-300 rounded font-bold flex items-center justify-center cursor-pointer transition-all text-[10px]"
+                          title="基準点を上に1マス移動"
+                        >
+                          ▲
+                        </button>
+                        <div />
+                        <button 
+                          onClick={() => moveRefG(-1, 0)}
+                          className="h-6 bg-amber-500/25 hover:bg-amber-500/40 border border-amber-500/40 active:scale-90 text-amber-300 rounded font-bold flex items-center justify-center cursor-pointer transition-all text-[10px]"
+                          title="基準点を左に1マス移動"
+                        >
+                          ◀
+                        </button>
+                        <div className="text-[7px] flex items-center justify-center text-slate-500 font-bold select-none">
+                          L字
+                        </div>
+                        <button 
+                          onClick={() => moveRefG(1, 0)}
+                          className="h-6 bg-amber-500/25 hover:bg-amber-500/40 border border-amber-500/40 active:scale-90 text-amber-300 rounded font-bold flex items-center justify-center cursor-pointer transition-all text-[10px]"
+                          title="基準点を右に1マス移動"
+                        >
+                          ▶
+                        </button>
+                        <div />
+                        <button 
+                          onClick={() => moveRefG(0, 1)}
+                          className="h-6 bg-amber-500/25 hover:bg-amber-500/40 border border-amber-500/40 active:scale-90 text-amber-300 rounded font-bold flex items-center justify-center cursor-pointer transition-all text-[10px]"
+                          title="基準点を下に1マス移動"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2.5 my-1">
+                      {/* 点A */}
+                      <div className="flex flex-col gap-1.5 bg-slate-800/40 p-2 sm:p-2.5 rounded-xl border border-slate-700/30">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] sm:text-[11px] font-bold text-amber-400 flex items-center gap-1">
+                            🟢 マスA <span className="text-[9px] text-slate-400 font-normal font-mono">(キャンバス: x:{coordMapping.refGx}, y:{coordMapping.refGy})</span>
+                          </span>
+                          <span className="text-[8px] text-slate-500 font-extrabold uppercase tracking-wider bg-slate-800 px-1 py-0.5 rounded">基準点</span>
+                        </div>
+                        <div className="flex gap-2 w-full">
+                          <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 flex-1 focus-within:ring-1 focus-within:ring-amber-500">
+                            <span className="text-[10px] text-slate-500 mr-1.5 font-mono">X:</span>
+                            <input 
+                              type="number" 
+                              pattern="[0-9]*"
+                              inputMode="numeric"
+                              value={coordInput.aX}
+                              onChange={(e) => setCoordInput(prev => ({ ...prev, aX: e.target.value }))}
+                              className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1.5 font-bold font-mono" 
+                              placeholder="ゲーム内X"
+                            />
+                          </div>
+                          <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 flex-1 focus-within:ring-1 focus-within:ring-amber-500">
+                            <span className="text-[10px] text-slate-500 mr-1.5 font-mono">Y:</span>
+                            <input 
+                              type="number" 
+                              pattern="[0-9]*"
+                              inputMode="numeric"
+                              value={coordInput.aY}
+                              onChange={(e) => setCoordInput(prev => ({ ...prev, aY: e.target.value }))}
+                              className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1.5 font-bold font-mono" 
+                              placeholder="ゲーム内Y"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 点B */}
+                      <div className="flex flex-col gap-1.5 bg-slate-800/40 p-2 sm:p-2.5 rounded-xl border border-slate-700/30">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] sm:text-[11px] font-bold text-sky-400 flex items-center gap-1">
+                            🔵 マスB <span className="text-[9px] text-slate-400 font-normal font-mono">(キャンバス: x:{coordMapping.refGx + 1}, y:{coordMapping.refGy})</span>
+                          </span>
+                          <span className="text-[8px] text-slate-500 font-extrabold uppercase tracking-wider bg-slate-800 px-1 py-0.5 rounded">右隣</span>
+                        </div>
+                        <div className="flex gap-2 w-full">
+                          <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 flex-1 focus-within:ring-1 focus-within:ring-sky-500">
+                            <span className="text-[10px] text-slate-500 mr-1.5 font-mono">X:</span>
+                            <input 
+                              type="number" 
+                              pattern="[0-9]*"
+                              inputMode="numeric"
+                              value={coordInput.bX}
+                              onChange={(e) => setCoordInput(prev => ({ ...prev, bX: e.target.value }))}
+                              className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1.5 font-bold font-mono" 
+                              placeholder="ゲーム内X"
+                            />
+                          </div>
+                          <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 flex-1 focus-within:ring-1 focus-within:ring-sky-500">
+                            <span className="text-[10px] text-slate-500 mr-1.5 font-mono">Y:</span>
+                            <input 
+                              type="number" 
+                              pattern="[0-9]*"
+                              inputMode="numeric"
+                              value={coordInput.bY}
+                              onChange={(e) => setCoordInput(prev => ({ ...prev, bY: e.target.value }))}
+                              className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1.5 font-bold font-mono" 
+                              placeholder="ゲーム内Y"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 点C */}
+                      <div className="flex flex-col gap-1.5 bg-slate-800/40 p-2 sm:p-2.5 rounded-xl border border-slate-700/30">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] sm:text-[11px] font-bold text-emerald-400 flex items-center gap-1">
+                            🔴 マスC <span className="text-[9px] text-slate-400 font-normal font-mono">(キャンバス: x:{coordMapping.refGx}, y:{coordMapping.refGy + 1})</span>
+                          </span>
+                          <span className="text-[8px] text-slate-500 font-extrabold uppercase tracking-wider bg-slate-800 px-1 py-0.5 rounded">下隣</span>
+                        </div>
+                        <div className="flex gap-2 w-full">
+                          <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 flex-1 focus-within:ring-1 focus-within:ring-emerald-500">
+                            <span className="text-[10px] text-slate-500 mr-1.5 font-mono">X:</span>
+                            <input 
+                              type="number" 
+                              pattern="[0-9]*"
+                              inputMode="numeric"
+                              value={coordInput.cX}
+                              onChange={(e) => setCoordInput(prev => ({ ...prev, cX: e.target.value }))}
+                              className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1.5 font-bold font-mono" 
+                              placeholder="ゲーム内X"
+                            />
+                          </div>
+                          <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 flex-1 focus-within:ring-1 focus-within:ring-emerald-500">
+                            <span className="text-[10px] text-slate-500 mr-1.5 font-mono">Y:</span>
+                            <input 
+                              type="number" 
+                              pattern="[0-9]*"
+                              inputMode="numeric"
+                              value={coordInput.cY}
+                              onChange={(e) => setCoordInput(prev => ({ ...prev, cY: e.target.value }))}
+                              className="w-full bg-transparent border-none text-xs text-white focus:outline-none py-1.5 font-bold font-mono" 
+                              placeholder="ゲーム内Y"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 w-full mt-1">
+                      <button 
+                        onClick={() => setIsCoordSettingMode(false)}
+                        className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 shadow transition-colors cursor-pointer"
+                      >
+                        キャンセル
+                      </button>
+                      <button 
+                        onClick={handleRegisterMapping}
+                        className="flex-[1.5] py-2.5 bg-amber-500 hover:bg-amber-600 rounded-xl text-xs font-extrabold text-white shadow shadow-amber-500/20 transition-colors cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        登録して自動計算
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* マップ優先（折りたたみ）表示 */}
+                    <div className="text-[10px] text-slate-300 bg-amber-500/5 p-2 rounded-xl border border-amber-500/10 mb-1 leading-normal">
+                      🗺️ <strong>マップ優先モード:</strong> 背景がよく見えるようになりました。緑🟢・青🔵・赤🔴のL字型をドラッグするか、下の十字ボタンで正しい位置に重ねてください。重ね終わったら、右上の<strong>「✍️ 座標入力」</strong>を押して本当の座標を入力してください。
+                    </div>
+
+                    {/* 現在のL字の位置プレビュー */}
+                    <div className="grid grid-cols-3 gap-2 text-center text-[10px] bg-slate-800/40 p-2 rounded-xl border border-slate-700/30">
+                      <div className="flex flex-col items-center">
+                        <span className="font-bold text-amber-400">🟢 マスA</span>
+                        <span className="font-mono text-slate-400 mt-0.5">({coordMapping.refGx}, {coordMapping.refGy})</span>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <span className="font-bold text-sky-400">🔵 マスB</span>
+                        <span className="font-mono text-slate-400 mt-0.5">({coordMapping.refGx + 1}, {coordMapping.refGy})</span>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <span className="font-bold text-emerald-400">🔴 マスC</span>
+                        <span className="font-mono text-slate-400 mt-0.5">({coordMapping.refGx}, {coordMapping.refGy + 1})</span>
+                      </div>
+                    </div>
+
+                    {/* 基準点位置の微調整十字キー */}
+                    <div className="flex items-center justify-between bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/50 gap-2">
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                        <span className="text-[10px] font-extrabold text-amber-400 flex items-center gap-1">
+                          🧭 基準点の一マス微調整
+                        </span>
+                        <span className="text-[8px] text-slate-400 leading-tight">
+                          タップで1マスずつ正確に動かせます。
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-1 w-[74px] shrink-0">
+                        <div />
+                        <button 
+                          onClick={() => moveRefG(0, -1)}
+                          className="h-6 bg-amber-500/30 hover:bg-amber-500/45 border border-amber-500/40 active:scale-90 text-amber-300 rounded font-bold flex items-center justify-center cursor-pointer transition-all text-[10px]"
+                        >
+                          ▲
+                        </button>
+                        <div />
+                        <button 
+                          onClick={() => moveRefG(-1, 0)}
+                          className="h-6 bg-amber-500/30 hover:bg-amber-500/45 border border-amber-500/40 active:scale-90 text-amber-300 rounded font-bold flex items-center justify-center cursor-pointer transition-all text-[10px]"
+                        >
+                          ◀
+                        </button>
+                        <div className="text-[7px] flex items-center justify-center text-slate-500 font-bold select-none">
+                          L字
+                        </div>
+                        <button 
+                          onClick={() => moveRefG(1, 0)}
+                          className="h-6 bg-amber-500/30 hover:bg-amber-500/45 border border-amber-500/40 active:scale-90 text-amber-300 rounded font-bold flex items-center justify-center cursor-pointer transition-all text-[10px]"
+                        >
+                          ▶
+                        </button>
+                        <div />
+                        <button 
+                          onClick={() => moveRefG(0, 1)}
+                          className="h-6 bg-amber-500/30 hover:bg-amber-500/45 border border-amber-500/40 active:scale-90 text-amber-300 rounded font-bold flex items-center justify-center cursor-pointer transition-all text-[10px]"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 座標入力へ切り替えるための大きなボタン */}
+                    <button 
+                      onClick={() => setIsCoordFormExpanded(true)}
+                      className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 rounded-xl text-xs font-extrabold text-white shadow shadow-amber-500/20 transition-colors cursor-pointer flex items-center justify-center gap-1.5 animate-pulse"
+                    >
+                      ✍️ 位置が決まったので座標を入力する
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Custom Alert/Prompt Modals */}
+          {activeDialog && (
+            <div 
+              className="fixed inset-0 bg-black/75 z-[5000] flex items-center justify-center p-4 animate-fade-in select-text"
+              onClick={() => setActiveDialog(null)}
+            >
+              <div 
+                className="w-full max-w-sm bg-white rounded-2xl p-6 flex flex-col gap-4 shadow-2xl border border-gray-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {activeDialog === "unlock" && (
+                  <>
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                      <span className="text-xl">🔒</span>
+                      <h3 className="text-base font-bold text-gray-800">
+                        ロック解除
+                      </h3>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-normal">
+                      この部屋は編集ロックされています。<br />
+                      解除するには <strong>PIN（暗証番号）</strong> を入力してください。
+                    </p>
+                    <input 
+                      type="password" 
+                      placeholder="PINを入力"
+                      value={dialogInput}
+                      onChange={(e) => setDialogInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleUnlockSubmit();
+                      }}
+                      autoFocus
+                      className="w-full h-11 border border-gray-300 rounded-xl px-3 text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-[#007aff] font-mono text-black"
+                    />
+                    <div className="flex gap-2.5 mt-2">
+                      <button 
+                        onClick={() => setActiveDialog(null)}
+                        className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-gray-600 transition-colors cursor-pointer"
+                      >
+                        キャンセル
+                      </button>
+                      <button 
+                        onClick={handleUnlockSubmit}
+                        className="flex-1 py-2.5 bg-[#007aff] hover:bg-[#007aff]/90 rounded-xl text-xs font-bold text-white shadow shadow-blue-500/10 transition-colors cursor-pointer"
+                      >
+                        解除する
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {activeDialog === "set_pin" && (
+                  <>
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                      <span className="text-xl">🔑</span>
+                      <h3 className="text-base font-bold text-gray-800">
+                        PIN（暗証番号）設定
+                      </h3>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-normal">
+                      編集ロック解除用のPIN（暗証番号）を設定します。<br />
+                      <span className="text-amber-600 font-semibold font-semibold">※空欄のまま登録すると、PINロックが解除され、誰でも編集可能になります。</span>
+                    </p>
+                    <input 
+                      type="text" 
+                      placeholder="新しいPIN（数字や英字など）"
+                      value={dialogInput}
+                      onChange={(e) => setDialogInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSetPinSubmit();
+                      }}
+                      autoFocus
+                      className="w-full h-11 border border-gray-300 rounded-xl px-3 text-center text-sm focus:outline-none focus:ring-2 focus:ring-[#007aff] font-mono text-black"
+                    />
+                    <div className="flex gap-2.5 mt-2">
+                      <button 
+                        onClick={() => setActiveDialog(null)}
+                        className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-gray-600 transition-colors cursor-pointer"
+                      >
+                        キャンセル
+                      </button>
+                      <button 
+                        onClick={handleSetPinSubmit}
+                        className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 rounded-xl text-xs font-bold text-white shadow shadow-amber-500/10 transition-colors cursor-pointer"
+                      >
+                        設定する
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {activeDialog === "room_name" && (
+                  <>
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                      <span className="text-xl">💾</span>
+                      <h3 className="text-base font-bold text-gray-800">
+                        新規部屋の保存
+                      </h3>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-normal">
+                      保存する部屋名を入力してください（例: <code>orange</code> 等）。<br />
+                      保存後はURLの末尾に <code>?room=部屋名</code> が付き、そのURLでいつでも同じ配置をロード・共有できます。
+                    </p>
+                    <input 
+                      type="text" 
+                      placeholder="部屋名（半角英数字を推奨）"
+                      value={dialogInput}
+                      onChange={(e) => setDialogInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRoomNameSubmit();
+                      }}
+                      autoFocus
+                      className="w-full h-11 border border-gray-300 rounded-xl px-3 text-center text-sm focus:outline-none focus:ring-2 focus:ring-[#007aff] font-mono text-black"
+                    />
+                    <div className="flex gap-2.5 mt-2">
+                      <button 
+                        onClick={() => setActiveDialog(null)}
+                        className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-gray-600 transition-colors cursor-pointer"
+                      >
+                        キャンセル
+                      </button>
+                      <button 
+                        onClick={handleRoomNameSubmit}
+                        className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-xl text-xs font-bold text-white shadow shadow-blue-500/10 transition-colors cursor-pointer"
+                      >
+                        保存する
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
