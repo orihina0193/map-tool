@@ -544,6 +544,12 @@
             if (text && text.trim() !== "") {
               const trimmedText = text.trim();
               if (trimmedText === "NOT_APPROVED") {
+                if (roomName === "OGsRoom") {
+                  setApprovalStatus("approved");
+                  showStatus("初期部屋（承認済扱い）", "#34c759");
+                  loadLocalData();
+                  return;
+                }
                 setApprovalStatus("not_approved");
                 setActiveDialog("approval_required");
                 showStatus("承認が必要です", "#ff3b30");
@@ -551,6 +557,12 @@
                 return;
               }
               if (trimmedText === "PENDING") {
+                if (roomName === "OGsRoom") {
+                  setApprovalStatus("approved");
+                  showStatus("初期部屋（承認済扱い）", "#34c759");
+                  loadLocalData();
+                  return;
+                }
                 setApprovalStatus("pending");
                 setActiveDialog("approval_required");
                 showStatus("承認待ちです", "#ff9500");
