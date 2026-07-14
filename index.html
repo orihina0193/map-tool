@@ -1914,6 +1914,65 @@
                 </button>
               </div>
 
+              {/* グループ選択 & グループ名編集コントロール (横幅いっぱいに上に配置) */}
+              {selIdx !== -1 && map[selIdx] && (
+                <div className="w-full flex flex-col gap-1 border-b border-gray-100 pb-1.5 mb-1 animate-fade-in">
+                  <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-bold text-gray-500">
+                    <span className="truncate">グループ設定（枠内入力で名称変更）</span>
+                    <button
+                      onClick={clearAllGroups}
+                      disabled={isEditLocked}
+                      className="text-[8px] sm:text-[9px] text-red-500 hover:text-red-600 active:text-red-700 font-bold bg-red-50 hover:bg-red-100 border border-red-200 rounded px-1 py-0.5 cursor-pointer disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+                      title="すべての建物のグループ所属を一括で全解除します"
+                    >
+                      一括解除
+                    </button>
+                  </div>
+                  <div className="flex gap-1 items-center justify-between">
+                    {/* 解除（未所属）ボタン */}
+                    <button
+                      onClick={() => updateItemGroup(-1)}
+                      className={`h-7 px-1.5 text-[9px] sm:text-[10px] font-bold rounded border transition-all cursor-pointer ${
+                        map[selIdx].groupIdx === undefined || map[selIdx].groupIdx === -1
+                          ? "bg-slate-700 text-white border-slate-700"
+                          : "bg-white text-slate-700 border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      解除
+                    </button>
+                    {/* 4つのグループの選択・編集ボタン */}
+                    {groupNames.map((gName, idx) => {
+                      const isSelected = map[selIdx].groupIdx === idx;
+                      const colorClasses = [
+                        isSelected ? "bg-red-500 text-white border-red-500" : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100/50",
+                        isSelected ? "bg-blue-500 text-white border-blue-500" : "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100/50",
+                        isSelected ? "bg-emerald-500 text-white border-emerald-500" : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/50",
+                        isSelected ? "bg-purple-500 text-white border-purple-500" : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100/50",
+                      ];
+                      return (
+                        <div key={idx} className="flex items-center gap-0.5 flex-1 min-w-0">
+                          <button
+                            onClick={() => updateItemGroup(idx)}
+                            className={`h-7 flex-1 text-[9px] sm:text-[10px] font-bold rounded border transition-all truncate cursor-pointer ${colorClasses[idx]}`}
+                            title={`${gName} に設定`}
+                          >
+                            {gName}
+                          </button>
+                          <input
+                            type="text"
+                            value={gName}
+                            onChange={(e) => renameGroup(idx, e.target.value)}
+                            className="w-8 sm:w-12 h-7 text-[8px] sm:text-[9px] font-bold border border-gray-300 rounded px-0.5 text-center focus:outline-none focus:ring-1 focus:ring-[#007aff] bg-white text-gray-700 shrink-0 font-sans"
+                            placeholder={`G${idx + 1}`}
+                            title="グループ名を編集"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* 素材移動・調整とモードコントロール */}
               <div className="flex gap-2 sm:gap-2.5 w-full mt-0.5 sm:mt-1">
                 {/* 微調整用 3x3 グリッド十字 */}
@@ -1960,64 +2019,6 @@
 
                 {/* モード切り替えパネル */}
                 <div className="flex-1 flex flex-col gap-1 justify-start overflow-hidden">
-                  {/* グループ選択 & グループ名編集コントロール */}
-                  {selIdx !== -1 && map[selIdx] && (
-                    <div className="flex flex-col gap-1 border-b border-gray-100 pb-1.5 mb-1">
-                      <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-bold text-gray-500">
-                        <span className="truncate">グループ設定（枠内入力で名称変更）</span>
-                        <button
-                          onClick={clearAllGroups}
-                          disabled={isEditLocked}
-                          className="text-[8px] sm:text-[9px] text-red-500 hover:text-red-600 active:text-red-700 font-bold bg-red-50 hover:bg-red-100 border border-red-200 rounded px-1 py-0.5 cursor-pointer disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
-                          title="すべての建物のグループ所属を一括で全解除します"
-                        >
-                          一括解除
-                        </button>
-                      </div>
-                      <div className="flex gap-1 items-center justify-between">
-                        {/* 解除（未所属）ボタン */}
-                        <button
-                          onClick={() => updateItemGroup(-1)}
-                          className={`h-7 px-1.5 text-[9px] sm:text-[10px] font-bold rounded border transition-all cursor-pointer ${
-                            map[selIdx].groupIdx === undefined || map[selIdx].groupIdx === -1
-                              ? "bg-slate-700 text-white border-slate-700"
-                              : "bg-white text-slate-700 border-gray-300 hover:bg-gray-50"
-                          }`}
-                        >
-                          解除
-                        </button>
-                        {/* 4つのグループの選択・編集ボタン */}
-                        {groupNames.map((gName, idx) => {
-                          const isSelected = map[selIdx].groupIdx === idx;
-                          const colorClasses = [
-                            isSelected ? "bg-red-500 text-white border-red-500" : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100/50",
-                            isSelected ? "bg-blue-500 text-white border-blue-500" : "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100/50",
-                            isSelected ? "bg-emerald-500 text-white border-emerald-500" : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/50",
-                            isSelected ? "bg-purple-500 text-white border-purple-500" : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100/50",
-                          ];
-                          return (
-                            <div key={idx} className="flex items-center gap-0.5 flex-1 min-w-0">
-                              <button
-                                onClick={() => updateItemGroup(idx)}
-                                className={`h-7 flex-1 text-[9px] sm:text-[10px] font-bold rounded border transition-all truncate cursor-pointer ${colorClasses[idx]}`}
-                                title={`${gName} に設定`}
-                              >
-                                {gName}
-                              </button>
-                              <input
-                                type="text"
-                                value={gName}
-                                onChange={(e) => renameGroup(idx, e.target.value)}
-                                className="w-8 sm:w-12 h-7 text-[8px] sm:text-[9px] font-bold border border-gray-300 rounded px-0.5 text-center focus:outline-none focus:ring-1 focus:ring-[#007aff] bg-white text-gray-700 shrink-0 font-sans"
-                                placeholder={`G${idx + 1}`}
-                                title="グループ名を編集"
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                   {/* 任意座標登録とセーブボタン */}
                   <div className="flex gap-1 w-full">
                     <button 
