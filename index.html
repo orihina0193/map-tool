@@ -211,6 +211,7 @@
 
       // オーバーレイ / モーダル
       const [showMemOverlay, setShowMemOverlay] = useState(false);
+      const [memFilterTab, setMemFilterTab] = useState("all");
       const [showAssetOverlay, setShowAssetOverlay] = useState(false);
       const [exportImageUrl, setExportImageUrl] = useState(null);
 
@@ -2117,52 +2118,127 @@
           </div>
 
           {/* 1. 配置メンバー一覧名簿モーダル */}
-          {showMemOverlay && (
-            <div 
-              className="fixed inset-0 bg-black/70 z-[3000] flex items-center justify-center p-4"
-              onClick={() => setShowMemOverlay(false)}
-            >
-              <div 
-                className="w-full max-w-sm bg-[#f8f9fa] rounded-2xl p-5 flex flex-col gap-4 max-h-[80vh] shadow-2xl border border-gray-200"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex justify-between items-center border-b-2 border-[#007aff] pb-2">
-                  <h3 className="text-base font-bold text-gray-800 flex items-center gap-1.5">
-                    <Users size={18} className="text-[#007aff]" /> 配置済みメンバー一覧
-                  </h3>
-                  <button onClick={() => setShowMemOverlay(false)} className="text-gray-500 hover:text-gray-700 font-bold text-lg">
-                    ×
-                  </button>
-                </div>
+          {showMemOverlay && (() => {
+            const allMembers = map.filter(d => d.mem && d.mem.trim() !== "");
+            const allCount = allMembers.length;
+            const redCount = allMembers.filter(d => d.groupIdx === 0).length;
+            const blueCount = allMembers.filter(d => d.groupIdx === 1).length;
+            const greenCount = allMembers.filter(d => d.groupIdx === 2).length;
 
-                <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-2 my-1">
-                  {map.filter(d => d.mem && d.mem.trim() !== "").length === 0 ? (
-                    <div className="text-center py-8 text-gray-400 text-sm font-medium">
-                      メンバーがまだ配置されていません
-                    </div>
-                  ) : (
-                    map
-                      .filter(d => d.mem && d.mem.trim() !== "")
-                      .sort((a, b) => a.mem.localeCompare(b.mem, "ja"))
-                      .map((m) => (
-                        <div 
-                          key={m.id}
-                          className="p-3 bg-white border border-gray-100 hover:border-[#007aff] rounded-lg text-sm flex justify-between items-center transition-all shadow-sm hover:shadow"
-                        >
-                          <span className="font-semibold text-gray-800">{m.mem}</span>
-                          <button 
-                            onClick={() => jumpToMember(m.id)}
-                            className="text-[#007aff] font-bold text-xs cursor-pointer hover:underline px-2 py-1 bg-sky-50 rounded"
-                          >
-                            表示 ▶
-                          </button>
-                        </div>
-                      ))
-                  )}
+            const filteredMembers = allMembers.filter((m) => {
+              if (memFilterTab === "all") return true;
+              if (memFilterTab === "red") return m.groupIdx === 0;
+              if (memFilterTab === "blue") return m.groupIdx === 1;
+              if (memFilterTab === "green") return m.groupIdx === 2;
+              return true;
+            });
+
+            return (
+              <div 
+                className="fixed inset-0 bg-black/70 z-[3000] flex items-center justify-center p-4"
+                onClick={() => setShowMemOverlay(false)}
+              >
+                <div 
+                  className="w-full max-w-sm bg-[#f8f9fa] rounded-2xl p-5 flex flex-col gap-4 max-h-[80vh] shadow-2xl border border-gray-200"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex justify-between items-center border-b-2 border-[#007aff] pb-2">
+                    <h3 className="text-base font-bold text-gray-800 flex items-center gap-1.5">
+                      <Users size={18} className="text-[#007aff]" /> 配置済みメンバー一覧
+                    </h3>
+                    <button onClick={() => setShowMemOverlay(false)} className="text-gray-500 hover:text-gray-700 font-bold text-lg">
+                      ×
+                    </button>
+                  </div>
+
+                  {/* 4つのタブ (ALL / 赤 / 青 / 緑) */}
+                  <div className="flex gap-1 bg-gray-100 p-1 rounded-xl text-[10px] font-bold">
+                    <button
+                      onClick={() => setMemFilterTab("all")}
+                      className={`flex-1 py-1.5 px-0.5 rounded-lg text-center transition-all cursor-pointer truncate ${
+                        memFilterTab === "all"
+                          ? "bg-white text-gray-800 shadow-sm"
+                          : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      ALL ({allCount})
+                    </button>
+                    <button
+                      onClick={() => setMemFilterTab("red")}
+                      className={`flex-1 py-1.5 px-0.5 rounded-lg text-center transition-all cursor-pointer truncate ${
+                        memFilterTab === "red"
+                          ? "bg-red-500 text-white shadow-sm"
+                          : "text-red-600 hover:bg-red-50/50"
+                      }`}
+                    >
+                      赤 ({redCount})
+                    </button>
+                    <button
+                      onClick={() => setMemFilterTab("blue")}
+                      className={`flex-1 py-1.5 px-0.5 rounded-lg text-center transition-all cursor-pointer truncate ${
+                        memFilterTab === "blue"
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-blue-600 hover:bg-blue-50/50"
+                      }`}
+                    >
+                      青 ({blueCount})
+                    </button>
+                    <button
+                      onClick={() => setMemFilterTab("green")}
+                      className={`flex-1 py-1.5 px-0.5 rounded-lg text-center transition-all cursor-pointer truncate ${
+                        memFilterTab === "green"
+                          ? "bg-emerald-600 text-white shadow-sm"
+                          : "text-emerald-600 hover:bg-emerald-50/50"
+                      }`}
+                    >
+                      緑 ({greenCount})
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-2 my-1">
+                    {filteredMembers.length === 0 ? (
+                      <div className="text-center py-8 text-gray-400 text-sm font-medium">
+                        {memFilterTab === "all"
+                          ? "メンバーがまだ配置されていません"
+                          : "このグループ of メンバーはいません"}
+                      </div>
+                    ) : (
+                      filteredMembers
+                        .sort((a, b) => a.mem.localeCompare(b.mem, "ja"))
+                        .map((m) => {
+                          let groupBadge = null;
+                          if (m.groupIdx === 0) {
+                            groupBadge = <span className="text-[9px] bg-red-50 text-red-600 border border-red-100 px-1.5 py-0.5 rounded font-bold shrink-0">{groupNames[0]}</span>;
+                          } else if (m.groupIdx === 1) {
+                            groupBadge = <span className="text-[9px] bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded font-bold shrink-0">{groupNames[1]}</span>;
+                          } else if (m.groupIdx === 2) {
+                            groupBadge = <span className="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-100 px-1.5 py-0.5 rounded font-bold shrink-0">{groupNames[2]}</span>;
+                          }
+
+                          return (
+                            <div 
+                              key={m.id}
+                              className="p-3 bg-white border border-gray-100 hover:border-[#007aff] rounded-lg text-sm flex justify-between items-center transition-all shadow-sm hover:shadow gap-2"
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-semibold text-gray-800 truncate">{m.mem}</span>
+                                {groupBadge}
+                              </div>
+                              <button 
+                                onClick={() => jumpToMember(m.id)}
+                                className="text-[#007aff] font-bold text-xs cursor-pointer hover:underline px-2 py-1 bg-sky-50 rounded shrink-0"
+                              >
+                                表示 ▶
+                              </button>
+                            </div>
+                          );
+                        })
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 2. アセット素材選択モーダル */}
           {showAssetOverlay && (
