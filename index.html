@@ -575,11 +575,15 @@
               const d = JSON.parse(LZString.decompressFromEncodedURIComponent(trimmedText));
               setMap(d.m || []);
               setLines(d.l || []);
+              let loadedGroups = ["グループA", "グループB", "グループC", "グループD"];
               if (d.g && Array.isArray(d.g)) {
-                setGroupNames(d.g);
-              } else {
-                setGroupNames(["グループA", "グループB", "グループC"]);
+                for (let i = 0; i < loadedGroups.length; i++) {
+                  if (d.g[i] !== undefined) {
+                    loadedGroups[i] = d.g[i];
+                  }
+                }
               }
+              setGroupNames(loadedGroups);
               setRoomPin(d.p || d.pin || "");
               if (d.c) {
                 setCoordMapping(d.c);
@@ -718,11 +722,15 @@
             setMap(d.m || []);
             setLines(d.l || []);
             setRoomPin(d.p || d.pin || "");
+            let loadedGroups = ["グループA", "グループB", "グループC", "グループD"];
             if (d.g && Array.isArray(d.g)) {
-              setGroupNames(d.g);
-            } else {
-              setGroupNames(["グループA", "グループB", "グループC"]);
+              for (let i = 0; i < loadedGroups.length; i++) {
+                if (d.g[i] !== undefined) {
+                  loadedGroups[i] = d.g[i];
+                }
+              }
             }
+            setGroupNames(loadedGroups);
             if (d.c) {
               setCoordMapping(d.c);
               setCoordInput({
