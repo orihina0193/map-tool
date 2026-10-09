@@ -160,7 +160,11 @@
       { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 1.6, o: 0, gw: 2, gh: 2, ox: -0.2, oy: -0.2 },
       { name: "OP", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/OP.png", s: 0.8, o: 0, gw: 1, gh: 1, ox: -0.1, oy: -0.1 },
       { name: "tile", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile.png", s: 1.6, o: 1, gw: 2, gh: 2, ox: -0.1, oy: -0.2 },
-      { name: "ROCK2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 0.75, o: -5, gw: 1, gh: 1, ox: 0, oy: 0 }
+      { name: "ROCK2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 0.75, o: -5, gw: 1, gh: 1, ox: 0, oy: 0 },
+      { name: "岩(南東)", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile_stone_se.png", s: 2.0, o: 0, gw: 2, gh: 2, ox: 0, oy: 0 },
+      { name: "岩(南西)", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile_stone_sw.png", s: 2.0, o: 0, gw: 2, gh: 2, ox: 0, oy: 0 },
+      { name: "岩(北西)", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile_stone_nw.png", s: 2.0, o: 0, gw: 2, gh: 2, ox: 0, oy: 0 },
+      { name: "岩(北東)", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile_stone_ne.png", s: 2.0, o: 0, gw: 2, gh: 2, ox: 0, oy: 0 }
     ];
 
     function App() {
@@ -1204,7 +1208,10 @@
             ctx.rotate((rot * Math.PI) / 180);
             ctx.drawImage(a.img, -w / 2, -h / 2, w, h);
           } else {
-            ctx.drawImage(a.img, anchor.x - w / 2, anchor.y - h + d.off, w, h);
+            // 通常描画（2x2地形タイルは0.5pxサブピクセル補正でCanvasレンダリングの継ぎ目隙間を完全防止）
+            const isTerrainTile = a.gw === 2 && a.gh === 2 && d.s >= 1.5;
+            const pad = isTerrainTile ? 0.5 : 0;
+            ctx.drawImage(a.img, anchor.x - w / 2 - pad / 2, anchor.y - h + d.off - pad / 4, w + pad, h + pad / 2);
           }
           ctx.restore();
 
