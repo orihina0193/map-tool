@@ -159,7 +159,7 @@
       { name: "RSS", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/RSS.png", s: 1.6, o: -4, gw: 2, gh: 2, ox: -0.2, oy: -0.3 },
       { name: "ST", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ST.png", s: 1.6, o: 0, gw: 2, gh: 2, ox: -0.2, oy: -0.2 },
       { name: "OP", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/OP.png", s: 0.8, o: 0, gw: 1, gh: 1, ox: -0.1, oy: -0.1 },
-      { name: "tile", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile.png", s: 1.6, o: 1, gw: 2, gh: 2, ox: -0.1, oy: -0.2 },
+      { name: "tile", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile.png", fallbackUrl: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile_stone_se.png", s: 1.6, o: 1, gw: 2, gh: 2, ox: -0.1, oy: -0.2 },
       { name: "ROCK2", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/ROCK2.png", s: 0.75, o: -5, gw: 1, gh: 1, ox: 0, oy: 0 },
       { name: "岩(南東)", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile_stone_se.png", s: 2.0, o: 0, gw: 2, gh: 2, ox: 0, oy: 0 },
       { name: "岩(南西)", url: "https://raw.githubusercontent.com/orihina0193/map-tool/main/img/tile_stone_sw.png", s: 2.0, o: 0, gw: 2, gh: 2, ox: 0, oy: 0 },
@@ -447,95 +447,110 @@
         }
       };
 
-      // プリセットロード
+      // プリセットロード（画像が404や削除されていてもインデックス番号を絶対にズラさない安全設計）
       const loadPresetsAssets = async () => {
         const loadedAssets = [];
         const hasBackend = window.location.hostname.endsWith("run.app") || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 
-        for (const p of PRESETS) {
-          await new Promise((resolve) => {
+        const createPlaceholderAsset = (p) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = 128;
+          canvas.height = 64;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.fillStyle = "rgba(100, 116, 139, 0.35)";
+            ctx.strokeStyle = "#94a3b8";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(64, 4);
+            ctx.lineTo(124, 32);
+            ctx.lineTo(64, 60);
+            ctx.lineTo(4, 32);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+          const dataUrl = canvas.toDataURL();
+          const img = new Image();
+          img.src = dataUrl;
+          return {
+            img,
+            src: dataUrl,
+            name: p.name,
+            defS: p.s,
+            defO: p.o,
+            gw: p.gw,
+            gh: p.gh,
+            ox: p.ox,
+            oy: p.oy
+          };
+        };
+
+        const tryLoadImage = (url) => {
+          return new Promise((resolve) => {
             const img = new Image();
             img.crossOrigin = "anonymous";
-            img.onload = () => {
-              const src = cropImage(img);
-              const i2 = new Image();
-              i2.onload = () => {
-                loadedAssets.push({
-                   img: i2,
-                   src,
-                   name: p.name,
-                   defS: p.s,
-                   defO: p.o,
-                   gw: p.gw,
-                   gh: p.gh,
-                   ox: p.ox,
-                   oy: p.oy
-                });
-                resolve();
-              };
-              i2.src = src;
-            };
-
-            img.onerror = () => {
-              // Direct github fallback
-              const directImg = new Image();
-              directImg.crossOrigin = "anonymous";
-              directImg.onload = () => {
-                const src = cropImage(directImg);
-                const i2 = new Image();
-                i2.onload = () => {
-                  loadedAssets.push({
-                    img: i2,
-                    src,
-                    name: p.name,
-                    defS: p.s,
-                    defO: p.o,
-                    gw: p.gw,
-                    gh: p.gh,
-                    ox: p.ox,
-                    oy: p.oy
-                  });
-                  resolve();
-                };
-                i2.src = src;
-              };
-
-              directImg.onerror = () => {
-                // Local fallback (in same directory)
-                const localImg = new Image();
-                localImg.onload = () => {
-                  const src = cropImage(localImg);
-                  const i2 = new Image();
-                  i2.onload = () => {
-                    loadedAssets.push({
-                      img: i2,
-                      src,
-                      name: p.name,
-                      defS: p.s,
-                      defO: p.o,
-                      gw: p.gw,
-                      gh: p.gh,
-                      ox: p.ox,
-                      oy: p.oy
-                    });
-                    resolve();
-                  };
-                  i2.src = src;
-                };
-                localImg.onerror = () => resolve();
-                const relativePath = p.url.includes("img/") ? p.url.slice(p.url.indexOf("img/")) : p.url;
-                localImg.src = relativePath;
-              };
-              directImg.src = p.url;
-            };
-
-            if (hasBackend) {
-              img.src = '/api/proxy-image?url=' + encodeURIComponent(p.url);
-            } else {
-              const relativePath = p.url.includes("img/") ? p.url.slice(p.url.indexOf("img/")) : null;
-              img.src = relativePath || p.url;
-            }
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = url;
           });
+        };
+
+        for (const p of PRESETS) {
+          const relativePath = p.url.includes("img/") ? p.url.slice(p.url.indexOf("img/")) : p.url;
+          const candidates = [];
+
+          if (hasBackend) {
+            candidates.push('/api/proxy-image?url=' + encodeURIComponent(p.url));
+          }
+          candidates.push(p.url);
+          candidates.push(relativePath);
+          if (!relativePath.startsWith("/")) {
+            candidates.push("/" + relativePath);
+          }
+
+          if (p.fallbackUrl) {
+            const fallbackRel = p.fallbackUrl.includes("img/") ? p.fallbackUrl.slice(p.fallbackUrl.indexOf("img/")) : p.fallbackUrl;
+            if (hasBackend) {
+              candidates.push('/api/proxy-image?url=' + encodeURIComponent(p.fallbackUrl));
+            }
+            candidates.push(p.fallbackUrl);
+            candidates.push(fallbackRel);
+            if (!fallbackRel.startsWith("/")) {
+              candidates.push("/" + fallbackRel);
+            }
+          }
+
+          let loadedImg = null;
+          for (const candUrl of candidates) {
+            loadedImg = await tryLoadImage(candUrl);
+            if (loadedImg && loadedImg.width > 0 && loadedImg.height > 0) {
+              break;
+            }
+          }
+
+          if (loadedImg) {
+            const src = cropImage(loadedImg);
+            const finalImg = new Image();
+            await new Promise((r) => {
+              finalImg.onload = () => r();
+              finalImg.onerror = () => r();
+              finalImg.src = src;
+            });
+            loadedAssets.push({
+              img: finalImg,
+              src,
+              name: p.name,
+              defS: p.s,
+              defO: p.o,
+              gw: p.gw,
+              gh: p.gh,
+              ox: p.ox,
+              oy: p.oy
+            });
+          } else {
+            loadedAssets.push(createPlaceholderAsset(p));
+          }
         }
 
         setAssets(loadedAssets);
