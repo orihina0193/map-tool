@@ -317,8 +317,7 @@
           'リセット': '全体をクリーンにリセットします。',
           'サイズ調整': 'スライダーで選択中の建物のサイズを変更します。',
           '接地調整': '前後関係や等角投影グリッドとの重なり順を調整します。',
-          '回転調整': '選択中の建物の向きをくるくる回転させます。スライダーや↺/↻ボタン、+90°ボタン、微調整中央の🔄ボタンで自由に回転できます。',
-          '微調整': '配置された建物のアンカー位置を十字ボタンで細かく調整します。中央の🔄で90度回転できます。',
+          '微調整': '配置された建物のアンカー位置を十字ボタンで細かく調整します。中央の・で初期位置にリセットできます。',
           '画像保存': '現在の配置図を白背景の1枚の画像として生成・ダウンロード保存します。',
           '全消去': '配置したすべてのオブジェクト・赤線を消去します。',
           'モード切替': '移動、ペンでのルート描画、赤線消去、建物消去を選択します。',
@@ -438,22 +437,6 @@
         }
       }, [currentRoomName]);
 
-      // キーボードショートカット (Rキーで選択中の建物をくるくる回転)
-      useEffect(() => {
-        const handleKeyDown = (e) => {
-          if (isEditLocked || selIdx === -1) return;
-          const target = e.target;
-          if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
-            return;
-          }
-          if (e.key === "r" || e.key === "R") {
-            e.preventDefault();
-            adjRotation(e.shiftKey ? -90 : 90);
-          }
-        };
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-      }, [isEditLocked, selIdx, map]);
 
       const showStatus = (text, color, autoHideDelay = 3000) => {
         setSyncStatus({ text, color });
@@ -936,22 +919,19 @@
         saveLocalData();
       };
 
-      // 建物の回転角度の更新 (0〜359度)
-      const updateItemRotation = (deg) => {
+      const resetNudge = () => {
         if (isEditLocked || selIdx === -1) return;
-        const normalized = ((Math.round(deg) % 360) + 360) % 360;
+        const a = assets[map[selIdx]?.aIdx];
         setMap((prev) => {
           const next = [...prev];
-          next[selIdx] = { ...next[selIdx], rot: normalized };
+          next[selIdx] = {
+            ...next[selIdx],
+            ox: a ? a.ox : 0,
+            oy: a ? a.oy : 0
+          };
           return next;
         });
         saveLocalData();
-      };
-
-      const adjRotation = (delta) => {
-        if (isEditLocked || selIdx === -1) return;
-        const currentRot = map[selIdx]?.rot || 0;
-        updateItemRotation(currentRot + delta);
       };
 
       const adjNudge = (dx, dy) => {
@@ -1197,23 +1177,11 @@
           const w = T_W * d.s;
           const h = (a.img.height / a.img.width) * w;
           const anchor = toS(d.x + a.gw + d.ox, d.y + a.gh + d.oy);
-          const rot = d.rot || 0;
 
-          ctx.save();
-          if (rot !== 0) {
-            // 画像の中心点で回転描画
-            const cx = anchor.x;
-            const cy = anchor.y - h / 2 + d.off;
-            ctx.translate(cx, cy);
-            ctx.rotate((rot * Math.PI) / 180);
-            ctx.drawImage(a.img, -w / 2, -h / 2, w, h);
-          } else {
-            // 通常描画（2x2地形タイルは0.5pxサブピクセル補正でCanvasレンダリングの継ぎ目隙間を完全防止）
-            const isTerrainTile = a.gw === 2 && a.gh === 2 && d.s >= 1.5;
-            const pad = isTerrainTile ? 0.5 : 0;
-            ctx.drawImage(a.img, anchor.x - w / 2 - pad / 2, anchor.y - h + d.off - pad / 4, w + pad, h + pad / 2);
-          }
-          ctx.restore();
+          // 通常描画（2x2地形タイルは0.5pxサブピクセル補正でCanvasレンダリングの継ぎ目隙間を完全防止）
+          const isTerrainTile = a.gw === 2 && a.gh === 2 && d.s >= 1.5;
+          const pad = isTerrainTile ? 0.5 : 0;
+          ctx.drawImage(a.img, anchor.x - w / 2 - pad / 2, anchor.y - h + d.off - pad / 4, w + pad, h + pad / 2);
 
           const isSelected = selIdx !== -1 && map[selIdx]?.id === d.id;
           if (lockedIdRef.current === d.id || isSelected) {
@@ -1233,20 +1201,6 @@
             ctx.lineTo(pE.x, pE.y);
             ctx.closePath();
             ctx.stroke();
-
-            // 回転している場合、画像のバウンディングボックスも回転させて視覚化
-            if (rot !== 0) {
-              ctx.save();
-              const cx = anchor.x;
-              const cy = anchor.y - h / 2 + d.off;
-              ctx.translate(cx, cy);
-              ctx.rotate((rot * Math.PI) / 180);
-              ctx.strokeStyle = "rgba(0, 122, 255, 0.55)";
-              ctx.lineWidth = 1.5 / camRef.current.z;
-              ctx.setLineDash([4 / camRef.current.z, 3 / camRef.current.z]);
-              ctx.strokeRect(-w / 2 - 2, -h / 2 - 2, w + 4, h + 4);
-              ctx.restore();
-            }
           }
         });
 
@@ -1542,8 +1496,7 @@
                   off: prev ? prev.off : a.defO,
                   ox: prev ? prev.ox : a.ox,
                   oy: prev ? prev.oy : a.oy,
-                  mem: "",
-                  rot: prev ? (prev.rot || 0) : 0
+                  mem: ""
                 };
                 setMap((prev) => [...prev, newItem]);
                 setTimeout(() => {
@@ -1982,62 +1935,6 @@
                 </button>
               </div>
 
-              {/* 回転（向き）調整スライダー */}
-              <div 
-                className="flex items-center gap-2"
-                onClick={(e) => handleGuideClick('回転調整', e)}
-              >
-                <label className="text-[11px] font-bold w-9 shrink-0 text-gray-500">回転</label>
-                <button 
-                  disabled={isEditLocked || selIdx === -1}
-                  onClick={() => adjRotation(-15)}
-                  className="w-8 h-7 sm:w-9 sm:h-8 text-xs sm:text-sm border border-gray-300 bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 rounded-md text-[#007aff] cursor-pointer shrink-0 font-bold active:bg-gray-200 transition-colors pointer-events-auto"
-                  title="反時計回りに15°回転"
-                >
-                  ↺
-                </button>
-                <div className="flex-1 flex items-center gap-1 min-w-0">
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="360" 
-                    step="5"
-                    disabled={isEditLocked || selIdx === -1}
-                    value={selIdx !== -1 && map[selIdx] ? (map[selIdx].rot || 0) : 0}
-                    onChange={(e) => updateItemRotation(parseInt(e.target.value) || 0)}
-                    className="flex-1 h-7 sm:h-9 cursor-pointer accent-[#007aff]"
-                  />
-                  <span className="text-[9px] font-mono font-bold text-gray-500 w-7 text-right shrink-0">
-                    {selIdx !== -1 && map[selIdx] ? `${map[selIdx].rot || 0}°` : "0°"}
-                  </span>
-                </div>
-                <button 
-                  disabled={isEditLocked || selIdx === -1}
-                  onClick={() => adjRotation(15)}
-                  className="w-8 h-7 sm:w-9 sm:h-8 text-xs sm:text-sm border border-gray-300 bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 rounded-md text-[#007aff] cursor-pointer shrink-0 font-bold active:bg-gray-200 transition-colors pointer-events-auto"
-                  title="時計回りに15°回転"
-                >
-                  ↻
-                </button>
-                <div className="flex items-center gap-0.5 shrink-0">
-                  <button
-                    disabled={isEditLocked || selIdx === -1}
-                    onClick={() => adjRotation(90)}
-                    className="h-7 sm:h-8 px-1.5 text-[9px] sm:text-[10px] font-bold border border-gray-300 bg-white hover:bg-gray-50 active:bg-gray-100 disabled:bg-gray-100 disabled:text-gray-400 text-gray-700 rounded transition-colors cursor-pointer"
-                    title="90°時計回りに回転"
-                  >
-                    +90°
-                  </button>
-                  <button
-                    disabled={isEditLocked || selIdx === -1}
-                    onClick={() => updateItemRotation(0)}
-                    className="h-7 sm:h-8 px-1.5 text-[9px] sm:text-[10px] font-bold border border-gray-300 bg-white hover:bg-gray-50 active:bg-gray-100 disabled:bg-gray-100 disabled:text-gray-400 text-gray-700 rounded transition-colors cursor-pointer"
-                    title="回転を0°にリセット"
-                  >
-                    0°
-                  </button>
-                </div>
-              </div>
 
               {/* グループ選択 & グループ名編集コントロール (横幅いっぱいに上に配置) */}
               {selIdx !== -1 && map[selIdx] && (
@@ -2125,13 +2022,13 @@
                     ←
                   </button>
                   <button 
-                    id="nudge-rot"
+                    id="nudge-reset"
                     disabled={isEditLocked || selIdx === -1}
-                    onClick={() => adjRotation(90)}
-                    className="h-7 sm:h-8 border border-blue-200 bg-blue-50/70 hover:bg-blue-100 active:bg-blue-200 disabled:bg-gray-100 disabled:text-gray-400 rounded-md font-bold text-[#007aff] flex items-center justify-center cursor-pointer transition-colors text-xs"
-                    title="タップで90°回転（くるくる）"
+                    onClick={resetNudge}
+                    className="h-7 sm:h-8 border border-gray-300 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 rounded-md font-bold text-gray-500 flex items-center justify-center cursor-pointer transition-colors text-xs"
+                    title="位置ズレをリセット"
                   >
-                    🔄
+                    ・
                   </button>
                   <button 
                     id="nudge-right"
